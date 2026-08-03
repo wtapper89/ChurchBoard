@@ -61,13 +61,14 @@ async function loadPositionCatalog(){
 
 async function loadSettings(){
   settings=await api("/api/settings");
-  const pc=settings.planning_center||{},pp=settings.propresenter||{},sh=settings.shure||{},live=pc.live_from_propresenter||{};
+  const pc=settings.planning_center||{},pp=settings.propresenter||{},sh=settings.shure||{},osm=settings.open_sound_meter||{},live=pc.live_from_propresenter||{};
   serviceTypeRows=pc.service_types||[];
   try{const runtime=await api("/api/runtime"),service=runtime.service||{},id=String(service.service_type_id||""),liveStatus=runtime.planning_center_live||{};if(id&&service.service_type_name&&!serviceTypeRows.some(item=>String(item.id)===id))serviceTypeRows.push({id,name:service.service_type_name});document.querySelector("#pp-live-status").textContent=liveStatus.message||""}catch(error){}
   sf.organization_name.value=settings.organization_name||"";await loadTimezoneOptions(settings.timezone||"America/New_York");sf.demo_mode.checked=!!settings.demo_mode;
   sf.pc_enabled.checked=!!pc.enabled;sf.pc_application_id.value=pc.application_id||"";sf.pc_days.value=pc.open_days_before??2;sf.pc_hours.value=pc.open_hours_before??3;sf.pc_close.value=pc.close_hours_after??3;
   sf.pp_enabled.checked=!!pp.enabled;sf.pp_host.value=pp.host||"127.0.0.1";sf.pp_port.value=pp.port||50001;sf.shure_enabled.checked=!!sh.enabled;
-  sf.pp_live_enabled.checked=!!live.enabled;sf.pp_live_take_control.checked=live.auto_take_control!==false;sf.pp_live_songs_only.checked=live.songs_only!==false;sf.pp_live_allow_previous.checked=!!live.allow_previous;sf.pp_live_match_mode.value=live.match_mode||"exact";sf.pp_live_stable_seconds.value=Number(live.stable_seconds??2);
+  sf.osm_enabled.checked=!!osm.enabled;sf.osm_host.value=osm.host||"127.0.0.1";sf.osm_port.value=osm.port||10010;sf.osm_preferred_metric.value=osm.preferred_metric||"laeq";sf.osm_response.value=osm.response||"fast";
+  sf.pp_live_enabled.checked=!!live.enabled;sf.pp_live_take_control.checked=live.auto_take_control!==false;sf.pp_live_songs_only.checked=live.songs_only!==false;sf.pp_live_allow_previous.checked=!!live.allow_previous;sf.pp_live_match_mode.value=live.match_mode||"exact";sf.pp_live_stable_seconds.value=Number(sf.pp_live_stable_seconds.value)||2;
   document.querySelector("#pc-status").textContent=pc.secret_configured?"Token saved; connection not yet tested":"";
   renderServiceTypes();hydrateMics(sh);await loadPositionCatalog();
 }
@@ -81,6 +82,7 @@ function settingsPayload(){
   return {...settings,organization_name:sf.organization_name.value,timezone:sf.timezone.value,demo_mode:sf.demo_mode.checked,
     planning_center:{...pcBase,enabled:sf.pc_enabled.checked,application_id:sf.pc_application_id.value,secret:sf.pc_secret.value,service_type_ids:serviceTypeIds,service_types:serviceTypeRows,open_days_before:Number(sf.pc_days.value),open_hours_before:Number(sf.pc_hours.value),close_hours_after:Number(sf.pc_close.value),live_from_propresenter:{...(pcBase.live_from_propresenter||{}),enabled:sf.pp_live_enabled.checked,auto_take_control:sf.pp_live_take_control.checked,songs_only:sf.pp_live_songs_only.checked,allow_previous:sf.pp_live_allow_previous.checked,match_mode:sf.pp_live_match_mode.value,stable_seconds:Math.max(0,Number(sf.pp_live_stable_seconds.value)||0)}},
     propresenter:{...(settings.propresenter||{}),enabled:sf.pp_enabled.checked,host:sf.pp_host.value,port:Number(sf.pp_port.value)},
+    open_sound_meter:{...(settings.open_sound_meter||{}),enabled:sf.osm_enabled.checked,host:sf.osm_host.value||"127.0.0.1",port:Number(sf.osm_port.value)||10010,preferred_metric:sf.osm_preferred_metric.value,response:sf.osm_response.value},
     shure:{...(settings.shure||{}),enabled:sf.shure_enabled.checked,receivers:[],mics:micRows.map(mic=>({...mic,name:String(mic.name).trim(),host:String(mic.host).trim(),port:Number(mic.port)||2202,channel:Number(mic.channel)||1}))},position_mic_map:micMap};
 }
 
@@ -99,6 +101,15 @@ document.querySelector("#pc-test").addEventListener("click",async()=>{
     serviceTypeRows=result.items||[];settings.planning_center.service_types=serviceTypeRows;renderServiceTypes();await saveSettings(false);
     status.textContent=`Connected · ${result.count} service type${result.count===1?"":"s"}`;
     await loadPositionCatalog();
+  }catch(error){status.textContent=error.message}
+});
+
+document.querySelector("#osm-test").addEventListener("click",async()=>{
+  const status=document.querySelector("#osm-status");status.textContent="Saving and connecting…";
+  try{
+    await saveSettings(false);
+    const result=await api("/api/integrations/open-sound-meter/test",{method:"POST"});
+    status.textContent=result.message||"Connected to Open Sound Meter";
   }catch(error){status.textContent=error.message}
 });
 

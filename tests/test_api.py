@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import json
 import tempfile
 import unittest
 
@@ -88,6 +89,117 @@ class ApiTests(unittest.TestCase):
         stopped = self.client.post("/api/desktop/quit")
         self.assertEqual(stopped.status_code, 409)
 
+    def test_producer_bootstrap_roles_checklists_and_completion(self):
+        redirect = self.client.get("/producer", follow_redirects=False)
+        self.assertEqual(redirect.status_code, 303)
+        owner = self.client.post("/api/auth/bootstrap", json={
+            "name": "Producer Owner", "email": "owner@example.test", "password": "a strong beta password",
+        })
+        self.assertEqual(owner.status_code, 200)
+        self.assertEqual(owner.json()["role"], "admin")
+        self.assertNotIn("password_hash", owner.json())
+        producer_page = self.client.get("/producer")
+        self.assertEqual(producer_page.status_code, 200)
+        self.assertEqual(producer_page.headers["cache-control"], "no-store")
+        created = self.client.post("/api/producer/templates", json={"data": {
+            "title": "Audio pre-service", "position_keys": ["production::audio"],
+            "tasks": [{"title": "Turn on console", "required": True}, {"title": "Save backup", "required": False}],
+        }})
+        self.assertEqual(created.status_code, 201)
+        template = created.json()
+        context = self.client.get("/api/producer/context").json()
+        self.assertEqual(context["templates"][0]["title"], "Audio pre-service")
+        plans_response = self.client.get("/api/producer/plans")
+        self.assertEqual(plans_response.status_code, 200)
+        self.assertEqual(plans_response.headers["cache-control"], "no-store")
+        self.assertEqual(plans_response.json()["items"], context["plans"])
+        producer_script = self.client.get("/static/producer.js").text
+        self.assertIn('producerApi("/api/producer/plans")', producer_script)
+        self.assertIn("setInterval(refreshPlanChoices,5000)", producer_script)
+        completion = self.client.put("/api/producer/completions", json={"data": {
+            "service_id": "demo", "template_id": template["id"], "task_id": template["tasks"][0]["id"],
+            "person_id": "person-1", "position_key": "production::audio", "completed": True,
+        }})
+        self.assertEqual(completion.status_code, 200)
+        self.assertTrue(completion.json()["completed"])
+        user = self.client.post("/api/users", json={
+            "name": "Volunteer", "email": "volunteer@example.test", "password": "temporary password", "role": "volunteer",
+            "campus_ids": ["main"], "planning_center_person_id": "person-1",
+        })
+        self.assertEqual(user.status_code, 201)
+
+    def test_producer_account_admin_service_selection_and_passwordless_login(self):
+        owner = self.client.post("/api/auth/bootstrap", json={
+            "name": "Owner", "email": "owner@example.test", "password": "short",
+        })
+        self.assertEqual(owner.status_code, 200)
+        context = self.client.get("/api/producer/context").json()
+        self.assertTrue(context["plans"])
+        selected = context["plans"][0]
+        switched = self.client.put("/api/active-plan", json={"id": selected["id"], "service_type_id": selected["service_type_id"]})
+        self.assertEqual(switched.status_code, 200)
+        campus = self.client.post("/api/campuses", json={"name": "North"}).json()
+        renamed = self.client.put(f"/api/campuses/{campus['id']}", json={"name": "North Campus"})
+        self.assertEqual(renamed.json()["name"], "North Campus")
+        passwordless = self.client.put("/api/organization/auth", json={"passwords_required": False})
+        self.assertFalse(passwordless.json()["passwords_required"])
+        user = self.client.post("/api/users", json={
+            "name": "Jordan Lee", "email": "jordan@example.test", "role": "volunteer",
+            "campus_ids": [campus["id"]], "planning_center_person_id": "1",
+        }).json()
+        updated = self.client.put(f"/api/users/{user['id']}", json={
+            "name": "Jordan L.", "email": "jordan@example.test", "role": "editor",
+            "campus_ids": [campus["id"]], "planning_center_person_id": "1",
+        })
+        self.assertEqual(updated.json()["role"], "editor")
+        self.client.post("/api/auth/logout")
+        status = self.client.get("/api/auth/status").json()
+        self.assertFalse(status["passwords_required"])
+        self.assertEqual({item["email"] for item in status["users"]}, {"owner@example.test", "jordan@example.test"})
+        login = self.client.post("/api/auth/login", json={"email": "jordan@example.test"})
+        self.assertEqual(login.status_code, 200)
+        self.assertEqual(login.json()["role"], "editor")
+        self.client.post("/api/auth/logout")
+        self.client.post("/api/auth/login", json={"email": "owner@example.test"})
+        self.assertEqual(self.client.delete(f"/api/users/{user['id']}").status_code, 204)
+        self.assertEqual(self.client.delete(f"/api/campuses/{campus['id']}").status_code, 204)
+
+    def test_local_admin_recovery_reenables_password_login(self):
+        self.client.post("/api/auth/bootstrap", json={"name": "Owner", "email": "owner@example.test", "password": "old"})
+        self.client.put("/api/organization/auth", json={"passwords_required": False})
+        self.client.post("/api/auth/logout")
+        recovered = self.client.put("/api/auth/recover-admin", json={"email": "owner@example.test", "password": "new"})
+        self.assertEqual(recovered.status_code, 200)
+        status = self.client.get("/api/auth/status").json()
+        self.assertTrue(status["passwords_required"])
+        self.assertEqual(self.client.post("/api/auth/login", json={"email": "owner@example.test", "password": "new"}).status_code, 200)
+
+    def test_demo_planning_center_people_can_be_matched_by_name(self):
+        people = self.client.get("/api/integrations/planning-center/people")
+        self.assertEqual(people.status_code, 200)
+        self.assertEqual(people.json()["items"][0]["name"], "Jordan Lee")
+
+    def test_dashboard_layout_export_and_import_renames_collision(self):
+        exported = self.client.get("/api/layouts/main/export")
+        self.assertEqual(exported.status_code, 200)
+        self.assertIn("churchboard-main.json", exported.headers["content-disposition"])
+        imported = self.client.post("/api/layouts/import", json=exported.json())
+        self.assertEqual(imported.status_code, 200)
+        self.assertEqual(imported.json()["items"][0]["slug"], "main-2")
+        self.assertEqual(imported.json()["items"][0]["name"], "Main (imported)")
+
+    def test_uploaded_position_resource_is_downloadable(self):
+        resource = self.client.post("/api/producer/resources", json={"data": {
+            "title": "Audio guide", "kind": "file", "position_keys": ["production::audio"],
+        }}).json()
+        uploaded = self.client.put(
+            f"/api/producer/resources/{resource['id']}/content?filename=guide.pdf",
+            content=b"sample-pdf", headers={"Content-Type": "application/pdf"},
+        )
+        self.assertEqual(uploaded.status_code, 200)
+        downloaded = self.client.get(f"/api/producer/resources/{resource['id']}/content")
+        self.assertEqual(downloaded.content, b"sample-pdf")
+
     def test_timezone_catalog_contains_standard_choices(self):
         response = self.client.get("/api/timezones")
         self.assertEqual(response.status_code, 200)
@@ -123,14 +235,12 @@ class ApiTests(unittest.TestCase):
         board = self.client.get("/api/dashboards/main").json()
         playlist = next(widget for widget in board["widgets"] if widget["type"] == "playlist")
         self.assertTrue(playlist["settings"]["allow_remote_trigger"])
-        self.assertEqual(playlist["settings"]["slide_size"], 120)
-        self.assertEqual(playlist["settings"]["item_size"], 48)
-        self.assertEqual(playlist["settings"]["marker_size"], 10)
+        self.assertEqual(playlist["settings"]["density"], "comfortable")
+        self.assertTrue(playlist["settings"]["auto_scroll"])
         self.assertEqual(playlist["settings"]["active_border_color"], "#f5c400")
         editor = self.client.get("/static/editor.js").text
-        self.assertIn("playlist_slide_size", editor)
-        self.assertIn("playlist_item_size", editor)
-        self.assertIn("playlist_marker_size", editor)
+        self.assertIn("playlist_density", editor)
+        self.assertIn("playlist_auto_scroll", editor)
         self.assertIn("playlist_active_border_color", editor)
         self.assertNotIn("playlist_keyboard_control", editor)
         self.assertNotIn("playlist_allow_remote_trigger", editor)
@@ -142,6 +252,70 @@ class ApiTests(unittest.TestCase):
         self.assertIn("/api/integrations/propresenter/navigate/", display_script)
         self.assertIn("keyboardStorageKey", display_script)
         self.assertFalse(playlist["settings"]["keyboard_control"])
+
+    def test_new_widgets_round_trip_and_editor_uses_a_settings_dialog(self):
+        board = self.client.get("/api/dashboards/main").json()
+        board["widgets"].extend([
+            {"id": "pp-pad", "type": "pp_controls", "x": 0, "y": 14, "w": 4, "h": 3, "title": "ProPresenter controls", "settings": {"allow_remote_trigger": True}},
+            {"id": "streams", "type": "livestreams", "x": 4, "y": 14, "w": 5, "h": 3, "title": "Livestream status", "settings": {"sources": [{"id": "youtube", "provider": "youtube", "label": "YouTube", "enabled": True}]}},
+        ])
+        saved = self.client.put("/api/dashboards/main", json=board)
+        self.assertEqual(saved.status_code, 200)
+        self.assertEqual({widget["type"] for widget in saved.json()["widgets"][-2:]}, {"pp_controls", "livestreams"})
+        editor = self.client.get("/editor/main").text
+        self.assertIn('role="dialog"', editor)
+        self.assertIn('id="inspector-backdrop"', editor)
+        script = self.client.get("/static/editor.js").text
+        self.assertIn("resize-corner", script)
+        self.assertIn("openWidgetSettings", script)
+        self.assertIn("livestream-source-editor", editor)
+        self.assertIn("setPointerCapture", script)
+
+    def test_livestream_api_credentials_are_kept_out_of_public_dashboards(self):
+        board = self.client.get("/api/dashboards/main").json()
+        board["widgets"].append({
+            "id": "secure-streams", "type": "livestreams", "x": 0, "y": 15, "w": 5, "h": 3,
+            "title": "Streams", "settings": {"sources": [{
+                "id": "youtube", "provider": "youtube", "enabled": True,
+                "channel_url": "https://www.youtube.com/@example", "api_token": "youtube-secret",
+            }]},
+        })
+        saved = self.client.put("/api/dashboards/main", json=board)
+        self.assertEqual(saved.status_code, 200)
+        saved_board = saved.json()
+        source = saved_board["widgets"][-1]["settings"]["sources"][0]
+        self.assertNotIn("api_token", source)
+        self.assertTrue(source["api_token_configured"])
+        self.assertNotIn("youtube-secret", self.client.get("/api/dashboards/main").text)
+        with open(os.environ["CHURCHBOARD_DATA_FILE"], encoding="utf-8") as handle:
+            raw = json.load(handle)
+        self.assertEqual(raw["secrets"]["livestream"]["main:secure-streams:youtube"], "youtube-secret")
+        source["clear_api_token"] = True
+        cleared = self.client.put("/api/dashboards/main", json=saved_board)
+        self.assertFalse(cleared.json()["widgets"][-1]["settings"]["sources"][0]["api_token_configured"])
+        with open(os.environ["CHURCHBOARD_DATA_FILE"], encoding="utf-8") as handle:
+            self.assertNotIn("main:secure-streams:youtube", json.load(handle)["secrets"]["livestream"])
+
+    def test_server_settings_validate_port_and_https_files(self):
+        settings = self.client.get("/api/settings").json()
+        settings["server"] = {"port": 70000, "https_enabled": False, "ssl_certfile": "", "ssl_keyfile": ""}
+        self.assertEqual(self.client.put("/api/settings", json=settings).status_code, 400)
+        settings["server"] = {"port": 8080, "https_enabled": True, "ssl_certfile": "/missing/cert.pem", "ssl_keyfile": "/missing/key.pem"}
+        self.assertEqual(self.client.put("/api/settings", json=settings).status_code, 400)
+        settings["server"] = {"port": 8080, "https_enabled": False, "ssl_certfile": "", "ssl_keyfile": ""}
+        saved = self.client.put("/api/settings", json=settings)
+        self.assertEqual(saved.status_code, 200)
+        self.assertEqual(saved.json()["server"]["port"], 8080)
+
+    def test_producer_media_tag_rules_are_saved(self):
+        self.client.post("/api/auth/bootstrap", json={"name": "Owner", "email": "owner@example.test", "password": "beta"})
+        saved = self.client.put("/api/producer/media-tag-rules", json={"items": [{
+            "position_key": "production::audio", "tag_id": "tag-audio", "tag_label": "Documentation > Audio",
+        }]})
+        self.assertEqual(saved.status_code, 200)
+        context = self.client.get("/api/producer/context").json()
+        self.assertEqual(context["media_tag_rules"][0]["tag_id"], "tag-audio")
+        self.assertIn("tagged_resources", context)
 
     def test_runtime_and_manual_service_selection(self):
         runtime = self.client.get("/api/runtime").json()

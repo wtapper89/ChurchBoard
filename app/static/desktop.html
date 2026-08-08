@@ -27,6 +27,14 @@
       <p class="muted">Connect Planning Center, ProPresenter, and Shure microphones, then create and edit dashboard layouts.</p>
     </section>
 
+    <section class="desktop-section producer-launch">
+      <div class="desktop-heading">
+        <div><p class="eyebrow">PLAN & PRODUCE</p><h2>Producer workspace</h2></div>
+        <a class="button desktop-primary" href="/producer">Open Producer</a>
+      </div>
+      <p class="muted">Position checklists, training resources, volunteer access, completion reporting, and team activity for the active service.</p>
+    </section>
+
     <section class="desktop-section">
       <div class="desktop-heading"><div><p class="eyebrow">DISPLAY</p><h2>Your boards</h2></div></div>
       <div id="desktop-boards" class="desktop-boards"><p class="muted">Loading boards…</p></div>
@@ -42,6 +50,11 @@
         <button id="install-update" class="button" type="button">Download and install update</button>
         <a id="release-link" class="button secondary" href="https://github.com/wtapper89/ChurchBoard/releases/latest" target="_blank" rel="noreferrer">Open GitHub releases</a>
       </div>
+    </section>
+
+    <section class="desktop-section">
+      <div class="desktop-heading"><div><p class="eyebrow">BACKUP</p><h2>Dashboard layouts</h2></div><div class="desktop-actions"><a class="button secondary" href="/api/layouts/export">Export layouts</a><label class="button secondary layout-import-button">Import layouts<input id="layout-import" type="file" accept="application/json,.json" hidden></label></div></div>
+      <p id="layout-import-status" class="muted">Move layouts between ChurchBoard installations or keep a backup before making changes.</p>
     </section>
 
     <footer class="desktop-footer">

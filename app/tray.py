@@ -14,8 +14,8 @@ from app.version import __version__
 
 
 class DesktopTray:
-    def __init__(self, port: int, data_file: Path, on_quit: Callable[[], None]):
-        self.base_url = f"http://127.0.0.1:{port}"
+    def __init__(self, port: int, data_file: Path, on_quit: Callable[[], None], scheme: str = "http"):
+        self.base_url = f"{scheme}://127.0.0.1:{port}"
         self.store = ConfigStore(data_file)
         self.on_quit = on_quit
         self.icon = None

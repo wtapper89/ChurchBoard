@@ -262,6 +262,55 @@ class PlanningCenterClient:
             }
         return None
 
+    async def media_tag_catalog(self) -> list[dict[str, Any]]:
+        groups = await self._get_all("/tag_groups", {"filter": "media", "order": "name"})
+        result = []
+        for group in groups.get("data", []):
+            group_id = str(group.get("id") or "")
+            attrs = group.get("attributes") or {}
+            if not group_id or str(attrs.get("tags_for") or "").casefold() != "media":
+                continue
+            tags = await self._get_all(f"/tag_groups/{group_id}/tags", {"order": "name"})
+            result.append({
+                "id": group_id,
+                "name": str(attrs.get("name") or "Media"),
+                "tags": [
+                    {"id": str(row.get("id") or ""), "name": str((row.get("attributes") or {}).get("name") or "")}
+                    for row in tags.get("data", [])
+                    if row.get("id") and (row.get("attributes") or {}).get("name")
+                ],
+            })
+        return result
+
+    async def media_for_tag(self, tag_id: str) -> list[dict[str, Any]]:
+        payload = await self._get_all("/media", {
+            "where[media_tag_ids][]": str(tag_id),
+            "include": "attachments",
+            "filter": "not_archived",
+            "order": "title",
+        })
+        included = {(str(row.get("type")), str(row.get("id"))): row for row in payload.get("included", [])}
+        resources = []
+        for row in payload.get("data", []):
+            attrs = row.get("attributes") or {}
+            attachments = [
+                included.get((str(rel.get("type")), str(rel.get("id"))), {})
+                for rel in (((row.get("relationships") or {}).get("attachments") or {}).get("data") or [])
+            ]
+            attachment_attrs = next(((attachment.get("attributes") or {}) for attachment in attachments if attachment.get("attributes")), {})
+            url = str(attachment_attrs.get("url") or attachment_attrs.get("linked_url") or "")
+            resources.append({
+                "id": str(row.get("id") or ""),
+                "title": str(attrs.get("title") or attachment_attrs.get("display_name") or "Planning Center media"),
+                "description": str(attachment_attrs.get("display_name") or attrs.get("media_type_name") or ""),
+                "kind": str(attachment_attrs.get("filetype") or attrs.get("media_type") or "media"),
+                "url": url,
+                "image_url": str(attrs.get("image_url") or attrs.get("thumbnail_url") or attachment_attrs.get("thumbnail_url") or ""),
+                "source": "Planning Center",
+                "tag_id": str(tag_id),
+            })
+        return resources
+
     async def candidate_plans(self, now: datetime | None = None) -> list[dict[str, Any]]:
         now = now or datetime.now(timezone.utc)
         service_types = await self.service_types()
@@ -300,6 +349,27 @@ class PlanningCenterClient:
                 candidates.append(plan)
         candidates.sort(key=lambda plan: plan.get("starts_at") or "")
         return candidates
+
+    async def people_catalog(self) -> list[dict[str, Any]]:
+        people = []
+        offset = 0
+        while offset < 1000:
+            payload = await self._get("/people", {"order": "name", "per_page": 100, "offset": offset})
+            rows = payload.get("data", [])
+            for row in rows:
+                attrs = row.get("attributes", {})
+                name = str(attrs.get("name") or " ".join(filter(None, [attrs.get("first_name"), attrs.get("last_name")]))).strip()
+                if name:
+                    people.append({
+                        "id": str(row.get("id") or ""),
+                        "name": name,
+                        "email": str(attrs.get("email") or ""),
+                        "photo": str(attrs.get("photo_url") or attrs.get("photo_thumbnail_url") or ""),
+                    })
+            if len(rows) < 100:
+                break
+            offset += 100
+        return people
 
     def select_plan(self, candidates: list[dict[str, Any]], manual: dict[str, str] | None, now: datetime | None = None) -> dict[str, Any] | None:
         now = now or datetime.now(timezone.utc)

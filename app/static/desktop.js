@@ -78,3 +78,4 @@ document.querySelector("#quit-app").addEventListener("click", async () => {
 
 loadDesktop();
 if (location.hash === "#updates") checkForUpdates();
+document.querySelector("#layout-import").addEventListener("change",async event=>{const file=event.target.files[0],status=document.querySelector("#layout-import-status");if(!file)return;status.textContent="Importing layouts…";try{const response=await fetch("/api/layouts/import",{method:"POST",headers:{"Content-Type":"application/json"},body:await file.text()}),data=await response.json();if(!response.ok)throw new Error(data.detail||"Import failed");status.textContent=`Imported ${data.count} layout${data.count===1?"":"s"}.`;await loadDesktop()}catch(error){status.textContent=error.message}finally{event.target.value=""}});

@@ -143,9 +143,9 @@ If the source copy is no longer present, download `installers/raspberry-pi/unins
 
 - Give the ChurchBoard computer a DHCP reservation or static address.
 - Keep ChurchBoard, Planning Center access, ProPresenter, and Shure receivers on a trusted production network. Enable **Controller Access** in the Advanced Settings of each SLX-D receiver.
-- Permit inbound TCP port `8040` only from devices that need the dashboard.
+- Permit the configured ChurchBoard TCP port (default `8040`) only from devices that need the dashboard. Change the port and optional HTTPS certificate paths under **Setup → Web server**, then restart ChurchBoard.
 - ChurchBoard connects to ProPresenter's configured API port and Shure receivers on TCP port `2202`.
-- Do not forward port `8040` directly from the internet.
+- Do not forward the ChurchBoard port directly from the internet. Use a maintained reverse proxy/VPN and HTTPS when remote access is required.
 
 ## Automatic startup summary
 

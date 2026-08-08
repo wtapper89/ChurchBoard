@@ -2,12 +2,15 @@ from __future__ import annotations
 
 import asyncio
 from difflib import SequenceMatcher
+import json
 import re
 import time
 import unicodedata
 from copy import deepcopy
 from datetime import datetime, timedelta, timezone
 from typing import Any
+
+import httpx
 
 from app.services.planning_center import PlanningCenterClient, calculate_timing, parse_time, service_items
 from app.services.propresenter import ProPresenterClient
@@ -27,7 +30,7 @@ class RuntimeService:
         self.state: dict[str, Any] = self.demo_state()
         self._task: asyncio.Task | None = None
         self._stop = asyncio.Event()
-        self._last_refresh = {"planning_center": 0.0, "planning_center_detail": 0.0, "planning_center_live": 0.0, "propresenter": 0.0, "shure": 0.0, "sennheiser": 0.0, "restream": 0.0, "obs": 0.0}
+        self._last_refresh = {"planning_center": 0.0, "planning_center_detail": 0.0, "planning_center_live": 0.0, "propresenter": 0.0, "shure": 0.0, "sennheiser": 0.0, "restream": 0.0, "obs": 0.0, "streams": 0.0}
         self._service_control: dict[str, Any] = {"active": False}
         self._pp_live_candidate = ""
         self._pp_live_candidate_since = 0.0
@@ -129,7 +132,10 @@ class RuntimeService:
         while not self._stop.is_set():
             await self.refresh()
             try:
-                await asyncio.wait_for(self._stop.wait(), 0.04)
+                # The fastest external source (ProPresenter) is cached at a
+                # quarter-second cadence. A 100 ms coordinator tick remains
+                # responsive without rereading settings 25 times per second.
+                await asyncio.wait_for(self._stop.wait(), 0.10)
             except asyncio.TimeoutError:
                 pass
 
@@ -155,6 +161,8 @@ class RuntimeService:
         else:
             await self._osm_listener.close()
         configured_media_titles = self._configured_media_titles(stored_data)
+        configured_resource_tags = self._configured_resource_tags(stored_data)
+        configured_stream_sources = self._configured_stream_sources(stored_data)
         if config.get("demo_mode"):
             demo = deepcopy(self.state) if self.state.get("service", {}).get("id") == "demo" else self.demo_state()
             demo["organization_name"] = config.get("organization_name", "My Church")
@@ -164,6 +172,7 @@ class RuntimeService:
             demo["manual_plan"] = config.get("manual_plan")
             demo["planning_center_live"] = {"enabled": bool((config.get("planning_center", {}).get("live_from_propresenter") or {}).get("enabled")), "state": "demo", "message": "Services LIVE automation is available when demonstration data is off"}
             demo["restream"] = {"connected": False, "status": "offline", "title": "Restream monitoring is unavailable in demo mode", "destinations": []}
+            demo["livestreams"] = [{**self._public_stream_source(source), "label": source.get("label") or str(source.get("provider") or "Stream").title(), "live": False, "status": "demo", "checked": False} for source in configured_stream_sources]
             self._apply_service_control(demo)
             self.state = demo
             return self.state
@@ -274,6 +283,13 @@ class RuntimeService:
                     "icon": media_by_title.get("icon"),
                     "error": "; ".join(media_errors),
                 }
+                tagged_resources = {}
+                for tag_id in configured_resource_tags:
+                    try:
+                        tagged_resources[tag_id] = await pc.media_for_tag(tag_id)
+                    except Exception as media_exc:
+                        media_errors.append(f"tag {tag_id}: {media_exc}")
+                next_state["planning_center_resources"] = tagged_resources
             except Exception as exc:
                 next_state["planning_center"] = {"connected": False, "error": str(exc)}
         elif pc.configured and detail_due and (next_state.get("service") or {}).get("id"):
@@ -355,6 +371,13 @@ class RuntimeService:
                 next_state["obs"] = {"connected": False, "streaming": False, "recording": False, "alert": "OBS unavailable", "error": str(exc), "sources": []}
         elif not self._obs_client.configured:
             next_state["obs"] = {"connected": False, "streaming": False, "recording": False, "alert": "", "sources": []}
+        stream_sources = configured_stream_sources
+        streams_due = clock - self._last_refresh["streams"] >= 15.0
+        if stream_sources and (force or streams_due):
+            self._last_refresh["streams"] = clock
+            next_state["livestreams"] = await self._livestream_statuses(stream_sources, next_state.get("restream") or {})
+        elif not stream_sources:
+            next_state["livestreams"] = []
         self._apply_assignments(next_state, config.get("position_mic_map", {}))
         self._apply_service_control(next_state)
         self.state = next_state
@@ -898,6 +921,118 @@ class RuntimeService:
                 if title:
                     titles.add(title)
         return sorted(titles, key=str.casefold)
+
+    @staticmethod
+    def _configured_resource_tags(data: dict[str, Any]) -> list[str]:
+        return sorted({
+            str(rule.get("tag_id") or "")
+            for rule in (data.get("producer", {}).get("media_tag_rules") or [])
+            if rule.get("tag_id")
+        })
+
+    @staticmethod
+    def _configured_stream_sources(data: dict[str, Any]) -> list[dict[str, Any]]:
+        sources: dict[str, dict[str, Any]] = {}
+        vault = (data.get("secrets") or {}).get("livestream") or {}
+        for dashboard in data.get("dashboards", []):
+            for widget in dashboard.get("widgets", []):
+                if widget.get("type") != "livestreams":
+                    continue
+                for source in (widget.get("settings") or {}).get("sources") or []:
+                    if not source.get("enabled", True):
+                        continue
+                    key = str(source.get("id") or source.get("provider") or source.get("label") or "").strip()
+                    if key:
+                        secret_key = f"{dashboard.get('id')}:{widget.get('id')}:{key.casefold()}"
+                        sources[key] = {**source, "id": key, "api_token": str(vault.get(secret_key) or "")}
+        return list(sources.values())
+
+    @staticmethod
+    def _public_stream_source(source: dict[str, Any]) -> dict[str, Any]:
+        return {key: value for key, value in source.items() if key not in {"api_token", "clear_api_token", "_secret_key"}}
+
+    @staticmethod
+    def _payload_is_live(payload: Any, keyword: str = "") -> bool:
+        if keyword:
+            return keyword.casefold() in json.dumps(payload, default=str).casefold()
+        live_keys = {"live", "is_live", "islive", "is_live_now", "islivenow", "online", "streaming", "broadcasting"}
+        live_values = {"live", "online", "healthy", "streaming", "broadcasting"}
+        if isinstance(payload, dict):
+            for key, value in payload.items():
+                normalized = re.sub(r"[^a-z]", "", str(key).casefold())
+                if normalized in {re.sub(r"[^a-z]", "", item) for item in live_keys}:
+                    if value is True or str(value).casefold() in live_values:
+                        return True
+                if normalized in {"status", "state", "broadcaststatus", "streamstatus"} and str(value).casefold() in live_values:
+                    return True
+                if isinstance(value, (dict, list)) and RuntimeService._payload_is_live(value):
+                    return True
+        elif isinstance(payload, list):
+            return any(RuntimeService._payload_is_live(value) for value in payload)
+        return False
+
+    @staticmethod
+    async def _livestream_statuses(sources: list[dict[str, Any]], restream: dict[str, Any]) -> list[dict[str, Any]]:
+        destinations = restream.get("destinations") or []
+        async with httpx.AsyncClient(timeout=4, follow_redirects=True, headers={"User-Agent": "ChurchBoard livestream monitor"}) as client:
+            async def check(source: dict[str, Any]) -> dict[str, Any]:
+                provider = str(source.get("provider") or "custom").casefold()
+                label = str(source.get("label") or provider.title())
+                public = RuntimeService._public_stream_source(source)
+                token = str(source.get("api_token") or "").strip()
+                api_url = str(source.get("api_url") or source.get("status_url") or "").strip()
+                channel_url = str(source.get("channel_url") or "").strip()
+                keyword = str(source.get("live_keyword") or "").strip()
+                try:
+                    if provider == "restream" and not api_url:
+                        live = str(restream.get("status") or "").casefold() in {"live", "online", "healthy", "streaming"} or any(
+                            str(row.get("status") or "").casefold() in {"live", "online", "healthy", "streaming"} for row in destinations
+                        )
+                        return {**public, "label": label, "live": live, "status": "live" if live else "offline", "checked": bool(restream.get("connected"))}
+                    if provider == "youtube" and token and channel_url:
+                        channel_id_match = re.search(r"youtube\.com/channel/(UC[\w-]+)", channel_url, re.I)
+                        channel_id = channel_id_match.group(1) if channel_id_match else ""
+                        if not channel_id:
+                            channel_page = await client.get(channel_url)
+                            channel_id_match = re.search(r'(?:"channelId"|"externalId")\s*:\s*"(UC[\w-]+)"', channel_page.text)
+                            channel_id = channel_id_match.group(1) if channel_id_match else ""
+                        if channel_id:
+                            response = await client.get("https://www.googleapis.com/youtube/v3/search", params={"part": "snippet", "channelId": channel_id, "eventType": "live", "type": "video", "maxResults": 1, "key": token})
+                            response.raise_for_status()
+                            live = bool((response.json() or {}).get("items"))
+                            return {**public, "label": label, "live": live, "status": "live" if live else "offline", "checked": True}
+                    if api_url:
+                        headers = {"Authorization": f"Bearer {token}"} if token else None
+                        response = await client.get(api_url, headers=headers)
+                        response.raise_for_status()
+                        try:
+                            payload: Any = response.json()
+                        except ValueError:
+                            payload = response.text
+                        live = RuntimeService._payload_is_live(payload, keyword)
+                        return {**public, "label": label, "live": live, "status": "live" if live else "offline", "checked": True}
+                    if provider in {"facebook", "youtube"} and channel_url:
+                        live_url = channel_url.rstrip("/")
+                        if provider == "youtube" and "/watch" not in live_url:
+                            live_url += "/live"
+                        elif provider == "facebook" and "/live" not in live_url.casefold():
+                            live_url += "/live"
+                        response = await client.get(live_url)
+                        response.raise_for_status()
+                        compact = re.sub(r"\s+", "", response.text).casefold()
+                        live = (
+                            (provider == "youtube" and "/watch" in str(response.url))
+                            or '"islivenow":true' in compact
+                            or '"islive":true' in compact
+                            or '"livebroadcastcontent":"live"' in compact
+                            or '"is_live_streaming":true' in compact
+                            or '"broadcast_status":"live"' in compact
+                        )
+                        return {**public, "label": label, "live": live, "status": "live" if live else "offline", "checked": True}
+                    return {**public, "label": label, "live": False, "status": "not configured", "checked": False}
+                except Exception as exc:
+                    return {**public, "label": label, "live": False, "status": "unreachable", "checked": True, "error": str(exc)}
+            return list(await asyncio.gather(*(check(source) for source in sources)))
 
     @staticmethod
     def demo_state(now: datetime | None = None) -> dict[str, Any]:

@@ -2,6 +2,7 @@ let dashboard,lastState={},serverInstance="",refreshInFlight=false,planOptionsKe
 const widgetRenderKeys=new Map();
 const orderScrollPositions=new Map();
 const playlistScrollPositions=new Map();
+const playlistActiveKeys=new Map();
 const objectIds=new WeakMap();let nextObjectId=1;
 const slug=decodeURIComponent(location.pathname.split("/").pop());
 let dashboardFitFrame=0;
@@ -17,6 +18,7 @@ function updateNativeSpl(){const osm=lastState.osm||{};document.querySelectorAll
 const triggerScope=element=>({dashboard_slug:slug,widget_id:element.closest(".widget")?.dataset.widget||null});
 document.addEventListener("click",async event=>{const button=event.target.closest("[data-pp-trigger]");if(!button||button.disabled)return;const index=Number(button.dataset.ppTrigger),playlistIndex=Number(button.dataset.ppPlaylistIndex);if(!Number.isInteger(index)||index<0||!Number.isInteger(playlistIndex)||playlistIndex<0)return;button.disabled=true;try{await api("/api/integrations/propresenter/active-slide",{method:"POST",body:JSON.stringify({index,playlist_index:playlistIndex,presentation_uuid:button.dataset.ppPresentationUuid||null,is_pco:button.dataset.ppIsPco==="true",...triggerScope(button)})});await refresh(true)}catch(error){alert(error.message)}finally{button.disabled=false}});
 document.addEventListener("click",async event=>{const button=event.target.closest("[data-pp-playlist-trigger]");if(!button||button.disabled)return;const index=Number(button.dataset.ppPlaylistTrigger);if(!Number.isInteger(index)||index<0)return;button.disabled=true;try{await api("/api/integrations/propresenter/active-playlist-item",{method:"POST",body:JSON.stringify({index,presentation_uuid:button.dataset.ppPresentationUuid||null,is_pco:button.dataset.ppIsPco==="true",...triggerScope(button)})})}catch(error){alert(error.message)}finally{button.disabled=false}});
+document.addEventListener("click",async event=>{const button=event.target.closest("[data-pp-nav],[data-pp-item-nav]");if(!button||button.disabled)return;const direction=button.dataset.ppNav||button.dataset.ppItemNav,endpoint=button.dataset.ppItemNav?"navigate-item":"navigate",status=button.closest(".pp-control-pad")?.querySelector("[data-pp-control-status]");button.disabled=true;if(status)status.textContent=direction==="next"?"Advancing ProPresenter…":"Going back in ProPresenter…";try{await api(`/api/integrations/propresenter/${endpoint}/${direction}`,{method:"POST",body:JSON.stringify(triggerScope(button))});await refresh(true)}catch(error){if(status)status.textContent=error.message}finally{button.disabled=false}});
 const keyboardStorageKey=widgetId=>`churchboard:${slug}:propresenter-keyboard:${widgetId}`;
 function syncPlaylistOperatorToggles(root=document){root.querySelectorAll('[data-widget-type="playlist"]').forEach(element=>{const widgetId=element.dataset.widget,controls=element.querySelector("[data-pp-controls-toggle]"),keyboard=element.querySelector("[data-pp-keyboard-toggle]");if(!keyboard)return;const controlsEnabled=!!controls?.checked;keyboard.disabled=!controlsEnabled;keyboard.checked=controlsEnabled&&localStorage.getItem(keyboardStorageKey(widgetId))==="true"})}
 function keyboardPlaylistWidget(){const toggle=document.querySelector('[data-widget-type="playlist"] [data-pp-keyboard-toggle]:checked:not(:disabled)'),widgetId=toggle?.closest(".widget")?.dataset.widget;return(dashboard?.widgets||[]).find(widget=>String(widget.id)===String(widgetId))}
@@ -96,6 +98,7 @@ function render(){
   if(!widgets.length&&root.innerHTML!==`<div class="empty">This dashboard has no widgets.</div>`){root.innerHTML=`<div class="empty">This dashboard has no widgets.</div>`;changed=true}
   updateTimingWidgets();updateOrderTimingWidgets();
   if(changed){tickClocks();enhanceDynamicContent(root);syncPlaylistOperatorToggles(root)}
+  updatePlaylistLiveState(root);
   queueDashboardFit();
   updateNativeSpl();
 }
@@ -107,14 +110,18 @@ function widgetStateKey(widget,state){
   if(widget.type==="service")return`service:${objectId(service)}:${timing.source||""}:${timing.state||""}`;
   if(widget.type==="timing")return`timing:${String(timing.current_item?.id||"")}:${timing.rehearsal===true}`;
   if(["assignments","mics"].includes(widget.type))return`${widget.type}:${JSON.stringify([state.people||[],state.mics||[],state.planning_center_media||{}])}`;
-  if(widget.type==="slides"||widget.type==="playlist"||widget.type==="producer")return`${widget.type}:${JSON.stringify([pp,service,timing])}`;
+  if(widget.type==="slides"||widget.type==="producer")return`${widget.type}:${JSON.stringify([pp,service,timing])}`;
+  if(widget.type==="playlist"){const rows=(pp.playlist_presentations||[]).map(item=>({index:item.index,title:item.title,presentation_uuid:item.presentation_uuid,is_pco:item.is_pco,triggerable:item.triggerable,type:item.type,slides:(item.slides||[]).map(slide=>({index:slide.index,part:slide.part,color:slide.color,image_url:slide.image_url}))}));return`playlist:${JSON.stringify([pp.playlist_name,pp.title,pp.planning_center_item_title,rows,settings])}`}
+  if(widget.type==="pp_controls")return`pp-controls:${String(pp.presentation_uuid||"")}:${String(pp.title||"")}`;
   if(widget.type==="notes")return`notes:${String(pp.current?.notes||"")}`;
   if(widget.type==="order")return`order:${objectId(timing.service_items||service.items)}:${objectId(state.people)}:${JSON.stringify(leaderMicKey(state.mics))}:${String(timing.current_item?.id||"")}:${timing.service_time_id||""}:${settings.show_leader!==false}:${settings.show_mic!==false}`;
   if(widget.type==="people"||widget.type==="person")return`${widget.type}:${objectId(state.people)}`;
   if(widget.type==="controls")return`controls:${JSON.stringify([state.planning_center_live||{},state.service_control||{},timing.current_item?.id,timing.current_item?.title])}`;
   if(widget.type==="restream")return`restream:${JSON.stringify(state.restream||{})}`;
+  if(widget.type==="livestreams")return`livestreams:${JSON.stringify([state.livestreams||[],settings.sources||[]])}`;
   return`${widget.type}:${JSON.stringify(state)}`;
 }
+function updatePlaylistLiveState(root=document){const pp=lastState.propresenter||{},uuid=String(pp.presentation_uuid||""),slide=Number(pp.current?.index)||0;root.querySelectorAll('[data-widget-type="playlist"]').forEach(widget=>{const widgetId=String(widget.dataset.widget||""),key=`${uuid}:${slide}`;widget.querySelectorAll("[data-pp-item-uuid]").forEach(item=>{const active=String(item.dataset.ppItemUuid||"")===uuid;item.classList.toggle("active",active);const status=item.querySelector("[data-pp-item-status]");if(status)status.textContent=active?"On air":status.dataset.idleLabel||""});widget.querySelectorAll("[data-pp-slide-uuid]").forEach(item=>item.classList.toggle("active",String(item.dataset.ppSlideUuid||"")===uuid&&Number(item.dataset.ppSlideNumber)===slide));if(playlistActiveKeys.get(widgetId)===key)return;playlistActiveKeys.set(widgetId,key);const configured=(dashboard?.widgets||[]).find(item=>String(item.id)===widgetId);if(configured?.settings?.auto_scroll===false)return;const target=widget.querySelector(".pp-list-slide.active")||widget.querySelector(".pp-list-presentation.active");target?.scrollIntoView({block:"nearest",inline:"nearest",behavior:"smooth"})})}
 function fitOrderService(root=document){
   root.querySelectorAll(".order-list").forEach(list=>{
     if(list.classList.contains("full-service-order-list"))return;
@@ -175,4 +182,4 @@ document.querySelector("#active-plan").addEventListener("change",async event=>{
   finally{planSelectionInFlight=false;select.disabled=false;updatePlans()}
 });
 api("/api/dashboards").then(data=>document.querySelector("#board-links").innerHTML=data.items.map(item=>`<div class="board-menu-row"><a class="board-menu-open" href="/display/${encodeURIComponent(item.slug)}">${escapeHtml(item.name)}</a><a class="board-menu-edit" href="/editor/${encodeURIComponent(item.slug)}" aria-label="Edit ${escapeHtml(item.name)}">Edit</a></div>`).join(""));
-checkServerInstance();loadBoard(); setInterval(refresh,75); setInterval(tickClocks,250);setInterval(checkServerInstance,5000);
+checkServerInstance();loadBoard(); setInterval(refresh,150); setInterval(tickClocks,250);setInterval(checkServerInstance,5000);

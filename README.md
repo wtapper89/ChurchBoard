@@ -8,6 +8,8 @@
 
 ChurchBoard is a cross-platform production dashboard for churches. It combines Planning Center schedules and people, ProPresenter slides and service flow, Shure QLX-D/ULX-D/SLX-D and Sennheiser EW-DX microphone telemetry, Open Sound Meter levels, OBS Studio health, and Restream broadcast status in configurable displays for the stage, green room, audio booth, and production team.
 
+> **Producer-platform beta:** The `beta/producer-platform` branch adds organization accounts and roles, campuses, Planning Center position checklists and tagged-media resources, completion/activity tracking, portable dashboard layouts, a modal widget editor with direct resize handles, configurable HTTP/HTTPS, and mobile layouts. See the [Producer workspace beta guide](docs/PRODUCER.md).
+
 ## Watch the setup and demo video
 
 See ChurchBoard in action and follow the setup walkthrough in the **[ChurchBoard setup and demo video](https://youtu.be/pE_uWD24G2c)**.
@@ -32,6 +34,10 @@ See ChurchBoard in action and follow the setup walkthrough in the **[ChurchBoard
 - OBS Studio streaming/recording state, connection health, output statistics, dropped-frame warnings, and an optional preview image
 - Planning Center Services LIVE control buttons
 - A WYSIWYG dashboard editor with independent layouts and color-matched liquid-glass widgets for each destination
+- Exportable/importable dashboard layout files and a categorized widget palette with gear/right-click modal settings and direct edge/corner resizing
+- A multi-provider livestream status widget with Facebook/YouTube channel URLs and independent BoxCast, Resi, and Restream API configuration
+- A dedicated ProPresenter control pad for previous/next slide and previous/next playlist item
+- A mobile-friendly producer workspace for position checklists, files, links, team access, campuses, and an activity trail *(producer-platform beta)*
 
 ![ChurchBoard audio-board dashboard](docs/screenshots/audio-board.jpg)
 
@@ -91,7 +97,7 @@ Start with [Configuration](docs/CONFIGURATION.md), then follow the detailed [Pla
 
 ## Dashboard editing
 
-Each dashboard has a stable URL. Add widgets from the palette, drag and resize them directly on the canvas, then configure the selected widget in the inspector. Every widget title can be hidden. Scheduled-position widgets can consolidate multiple roles into one card per person or retain one card per position. The ProPresenter playlist widget shows the focused playlist as a continuous scrollable list, including placeholders and all presentation slides; its inspector controls slide, playlist-item, and section-marker sizes plus the active-slide border color. An optional per-board keyboard mode sends Left/Up to the previous ProPresenter cue and Right/Down/Space to the next cue, including transitions between playlist items. Order-of-service widgets can show a compact current window, a scrollable complete plan, or the complete plan fitted to the widget. Text, cards, photos, and status displays scale with their widget and remain visible when a display changes size or enters fullscreen. Setup can cancel a new dashboard before it is named, and the editor includes a confirmation-protected **Delete display** action. The display hamburger includes an **Edit** action beside every board, and **Open display** in the editor reuses the current tab.
+Each dashboard has a stable URL. Add widgets from the palette, drag them on the canvas, and resize from the blue right edge, bottom edge, or corner. A gear or right-click opens modal settings, leaving the full editor width for the board. Every widget title can be hidden. Scheduled-position widgets can consolidate multiple roles into one card per person or retain one card per position. The ProPresenter playlist widget shows the focused playlist as a continuous, automatically scrolling list, including placeholders and all presentation slides; choose compact, comfortable, or large density and an active-slide border color. An optional per-board keyboard mode sends Left/Up to the previous ProPresenter cue and Right/Down/Space to the next cue. A separate control widget provides previous/next slide and item buttons. Order-of-service widgets can show a compact current window, a scrollable complete plan, or the complete plan fitted to the widget. Text, cards, photos, and status displays scale with their widget and stack into readable cards on narrow mobile screens. Setup can cancel a new dashboard before it is named, and the editor includes a confirmation-protected **Delete display** action. The display hamburger includes an **Edit** action beside every board, and **Open display** in the editor reuses the current tab.
 
 ![ChurchBoard WYSIWYG dashboard editor](docs/screenshots/dashboard-editor.jpg)
 
@@ -128,4 +134,4 @@ See [Development and release builds](docs/DEVELOPMENT.md) for platform build com
 
 ## Security
 
-Planning Center credentials remain in the local ChurchBoard data directory and are excluded from Git. ChurchBoard is intended for a trusted production LAN and does not yet provide its own login screen or TLS termination. Read [SECURITY.md](SECURITY.md) before exposing it beyond that network.
+Planning Center credentials remain in the local ChurchBoard data directory and are excluded from Git. The producer-platform beta provides local accounts, role-based access, secure session cookies, and direct HTTPS certificate support. Keep ChurchBoard on a trusted production network and read [SECURITY.md](SECURITY.md) before allowing remote access.

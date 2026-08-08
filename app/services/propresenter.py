@@ -68,7 +68,7 @@ class ProPresenterClient:
         base = f"http://{self.settings.get('host', '127.0.0.1')}:{int(self.settings.get('port', 50001))}"
         clock = time.monotonic()
         fetch_active = not self._active_payload or clock - self._active_refreshed >= 0.25
-        fetch_playlist = not self._playlist_payload or clock - self._playlist_refreshed >= 0.5
+        fetch_playlist = not self._playlist_payload or clock - self._playlist_refreshed >= 1.5
         names = ["slide", "index"]
         requests = [
             self._http().get(f"{base}/v1/status/slide"),
@@ -117,7 +117,7 @@ class ProPresenterClient:
             )
             if presentation_uuids and (
                 presentation_uuids != self._playlist_details_key
-                or clock - self._playlist_details_refreshed >= 5.0
+                or clock - self._playlist_details_refreshed >= 30.0
             ):
                 detail_responses = await asyncio.gather(*[
                     self._http().get(f"{base}/v1/presentation/{quote(uuid, safe='')}")
@@ -142,7 +142,7 @@ class ProPresenterClient:
         # playlist widget has every cue, group and label—not just Now/Next.
         if presentation_uuid and (
             presentation_uuid != self._presentation_details_uuid
-            or clock - self._presentation_details_refreshed >= 0.5
+            or clock - self._presentation_details_refreshed >= 2.0
         ):
             detail_response = await self._http().get(
                 f"{base}/v1/presentation/{quote(presentation_uuid, safe='')}"
@@ -259,7 +259,7 @@ class ProPresenterClient:
         })
         for item in playlist_presentations:
             item_uuid = item.get("presentation_uuid") or ""
-            item_details = self._playlist_presentation_details.get(item_uuid) or {}
+            item_details = presentation if item_uuid == presentation_uuid else self._playlist_presentation_details.get(item_uuid) or {}
             entries = self._presentation_cue_entries(item_details)
             item["slides"] = [
                 {

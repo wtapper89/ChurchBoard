@@ -5,6 +5,7 @@ import csv
 import json
 import logging.handlers
 import os
+import ssl
 import subprocess
 import sys
 import threading
@@ -51,13 +52,18 @@ def desktop_log_config(data_file) -> dict:
 def open_churchboard(page: str) -> None:
     config = load_config()
     path = "/" + str(page or "admin").lstrip("/")
-    webbrowser.open(f"http://127.0.0.1:{config.port}{path}")
+    webbrowser.open(f"{config.scheme}://127.0.0.1:{config.port}{path}")
+
+
+def _local_urlopen(url: str, timeout: float):
+    context = ssl._create_unverified_context() if url.startswith("https://") else None
+    return urllib.request.urlopen(url, timeout=timeout, context=context)
 
 
 def running_churchboard_info() -> dict | None:
     config = load_config()
     try:
-        with urllib.request.urlopen(f"http://127.0.0.1:{config.port}/api/app-info", timeout=0.75) as response:
+        with _local_urlopen(f"{config.scheme}://127.0.0.1:{config.port}/api/app-info", timeout=0.75) as response:
             if response.status != 200:
                 return None
             result = json.loads(response.read().decode("utf-8"))
@@ -152,10 +158,10 @@ def stop_incompatible_churchboard() -> bool:
 def open_churchboard_when_ready(page: str, timeout: float = 20.0) -> None:
     config = load_config()
     deadline = time.monotonic() + timeout
-    health_url = f"http://127.0.0.1:{config.port}/api/app-info"
+    health_url = f"{config.scheme}://127.0.0.1:{config.port}/api/app-info"
     while time.monotonic() < deadline:
         try:
-            with urllib.request.urlopen(health_url, timeout=0.75) as response:
+            with _local_urlopen(health_url, timeout=0.75) as response:
                 if response.status == 200:
                     open_churchboard(page)
                     return
@@ -176,9 +182,11 @@ def run_with_desktop_tray() -> None:
             reload=False,
             access_log=False,
             log_config=desktop_log_config(config.data_file),
+            ssl_certfile=str(config.ssl_certfile) if config.ssl_certfile else None,
+            ssl_keyfile=str(config.ssl_keyfile) if config.ssl_keyfile else None,
         )
     )
-    tray = DesktopTray(config.port, config.data_file, lambda: setattr(server, "should_exit", True))
+    tray = DesktopTray(config.port, config.data_file, lambda: setattr(server, "should_exit", True), config.scheme)
     app.state.desktop_quit = tray.quit
     app.state.desktop_tray = True
     server_thread = threading.Thread(target=server.run, name="ChurchBoard server", daemon=True)

@@ -8,7 +8,7 @@ from pydantic import BaseModel, Field, field_validator
 
 class Widget(BaseModel):
     id: str = Field(min_length=1, max_length=80)
-    type: Literal["clock", "service", "timing", "assignments", "mics", "slides", "playlist", "pp_controls", "notes", "sermon_notes", "order", "person", "people", "spl", "controls", "text", "restream", "livestreams", "obs", "propresenter_timers"]
+    type: Literal["clock", "service", "timing", "assignments", "mics", "slides", "playlist", "pp_controls", "notes", "sermon_notes", "order", "person", "people", "spl", "controls", "text", "restream", "livestreams", "obs", "ndi", "propresenter_timers"]
     x: int = Field(ge=0, le=23)
     y: int = Field(ge=0, le=100)
     w: int = Field(ge=1, le=24)
@@ -54,6 +54,9 @@ class SettingsUpdate(BaseModel):
     open_sound_meter: dict[str, Any] = Field(default_factory=dict)
     restream: dict[str, Any] = Field(default_factory=dict)
     obs: dict[str, Any] = Field(default_factory=dict)
+    ndi: dict[str, Any] = Field(default_factory=dict)
+    intercom: dict[str, Any] = Field(default_factory=dict)
     server: dict[str, Any] = Field(default_factory=dict)
     position_mic_map: dict[str, str] = Field(default_factory=dict)
     manual_plan: dict[str, str] | None = None
+    manual_service_time: dict[str, str] | None = None

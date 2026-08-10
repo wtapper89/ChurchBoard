@@ -1,6 +1,12 @@
 # Producer workspace
 
-ChurchBoard 1.4 evolves the display system into a service-production workspace while retaining the existing local, no-login behavior until an owner account is created.
+ChurchBoard 1.5 beta extends the display system into a service-production workspace while retaining the existing local, no-login behavior until an owner account is created.
+
+ChurchBoard selects the current Planning Center service time automatically, not only the service plan. This matters when a position has a different person at an early, middle, or late service. Administrators and editors can override the time from the Producer service-time menu; returning it to **Automatic for current time** resumes time-based selection.
+
+The optional second listener defaults to port 80 and exposes only sign-in, the Producer workspace, checklists, locally mirrored resources, and their required APIs. It redirects attempts to open dashboards or Setup. Configure a different port such as 8080 when the operating system reserves port 80. Restart ChurchBoard after changing listener settings.
+
+Planning Center tagged resources are downloaded by ChurchBoard during a successful tag refresh. Volunteers open the local copy and are not sent to a Planning Center login. When a later complete refresh confirms that a media item is no longer tagged, ChurchBoard removes its cached local copy. A failed or incomplete Planning Center refresh never triggers that cleanup.
 
 ## Start Producer
 
@@ -64,4 +70,4 @@ On the same trusted network, open `https://churchboard-hostname:8040/producer` f
 
 ## Current scope
 
-ChurchBoard 1.4 uses local accounts and local resource storage. Invitation email, password-reset email, SSO, directory synchronization, aggregate reporting, and cloud storage are not included. Back up the ChurchBoard data directory and export layouts regularly.
+ChurchBoard 1.5 beta uses local accounts and local resource storage. Invitation email, password-reset email, SSO, directory synchronization, aggregate reporting, and cloud storage are not included. Back up the ChurchBoard data directory and export layouts regularly.

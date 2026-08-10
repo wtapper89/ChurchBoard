@@ -12,7 +12,14 @@ from typing import Any
 
 import httpx
 
-from app.services.planning_center import PlanningCenterClient, calculate_timing, parse_time, service_items
+from app.services.planning_center import (
+    PlanningCenterClient,
+    calculate_timing,
+    parse_time,
+    people_for_service_time,
+    selected_service_time,
+    service_items,
+)
 from app.services.propresenter import ProPresenterClient
 from app.services.shure import ShureClient
 from app.services.sennheiser import SennheiserClient
@@ -20,6 +27,9 @@ from app.services.spl_reports import SPLReportStore
 from app.services.osm import OSMListener
 from app.services.obs import OBSClient
 from app.services.restream import RestreamClient
+from app.services.media_cache import PlanningCenterMediaCache
+from app.services.ndi import NDIRuntime
+from app.services.livekit import HostedIntercomServer
 from app.store import ConfigStore
 
 
@@ -47,6 +57,30 @@ class RuntimeService:
         self._restream_key: tuple[Any, ...] | None = None
         self._obs_client: OBSClient | None = None
         self._obs_key: tuple[Any, ...] | None = None
+        self.media_cache = PlanningCenterMediaCache(store.path)
+        self.ndi = NDIRuntime()
+        self.intercom = HostedIntercomServer(store.path)
+
+    @staticmethod
+    def _manual_service_time_id(config: dict[str, Any], service: dict[str, Any] | None) -> str:
+        manual = config.get("manual_service_time") or {}
+        if not service or str(manual.get("plan_id") or "") != str(service.get("id") or ""):
+            return ""
+        return str(manual.get("id") or "")
+
+    def _apply_plan_detail(self, state: dict[str, Any], detail: dict[str, Any] | None, config: dict[str, Any]) -> None:
+        """Apply a plan and its time-specific roster as one atomic state change."""
+        state["service"] = detail
+        state["manual_service_time"] = config.get("manual_service_time")
+        if not detail:
+            state["people"] = []
+            state["timing"] = calculate_timing(None)
+            return
+        manual_id = self._manual_service_time_id(config, detail)
+        chosen = selected_service_time(detail, manual_id=manual_id)
+        chosen_id = str(chosen.get("id") or "") if chosen else ""
+        state["people"] = people_for_service_time(detail.get("people") or [], chosen_id)
+        state["timing"] = calculate_timing(detail, service_time_id=manual_id)
 
     def record_spl_measurement(self, measurement: dict[str, Any], metric_key: str = "a_fast", metric_label: str = "A-weighted Fast") -> None:
         """Persist a normalized bridge reading against the current LIVE item."""
@@ -127,6 +161,8 @@ class RuntimeService:
                 pass
             self._planning_center_detail_task = None
         await self._osm_listener.close()
+        self.ndi.close()
+        self.intercom.stop()
 
     async def _run(self) -> None:
         while not self._stop.is_set():
@@ -142,6 +178,8 @@ class RuntimeService:
     async def refresh(self, force: bool = False) -> dict[str, Any]:
         stored_data = self.store.load()
         config = stored_data["settings"]
+        self.ndi.configure(config.get("ndi", {}))
+        self.intercom.configure(config.get("intercom", {}))
         osm_settings = config.get("open_sound_meter", {})
         if osm_settings.get("enabled"):
             try:
@@ -170,6 +208,7 @@ class RuntimeService:
             demo["updated_at"] = datetime.now(timezone.utc).isoformat()
             demo["timing"] = calculate_timing(demo.get("service"))
             demo["manual_plan"] = config.get("manual_plan")
+            demo["manual_service_time"] = config.get("manual_service_time")
             demo["planning_center_live"] = {"enabled": bool((config.get("planning_center", {}).get("live_from_propresenter") or {}).get("enabled")), "state": "demo", "message": "Services LIVE automation is available when demonstration data is off"}
             demo["restream"] = {"connected": False, "status": "offline", "title": "Restream monitoring is unavailable in demo mode", "destinations": []}
             demo["livestreams"] = [{**self._public_stream_source(source), "label": source.get("label") or str(source.get("provider") or "Stream").title(), "live": False, "status": "demo", "checked": False} for source in configured_stream_sources]
@@ -177,10 +216,10 @@ class RuntimeService:
             self.state = demo
             return self.state
         next_state = deepcopy(self.state)
-        next_state.update({"organization_name": config.get("organization_name", "ChurchBoard"), "timezone": config.get("timezone", ""), "updated_at": datetime.now(timezone.utc).isoformat(), "manual_plan": config.get("manual_plan")})
+        next_state.update({"organization_name": config.get("organization_name", "ChurchBoard"), "timezone": config.get("timezone", ""), "updated_at": datetime.now(timezone.utc).isoformat(), "manual_plan": config.get("manual_plan"), "manual_service_time": config.get("manual_service_time")})
         live_config = config.get("planning_center", {}).get("live_from_propresenter") or {}
         if not live_config.get("enabled") or not self._apply_cached_live_timing(next_state):
-            next_state["timing"] = calculate_timing(next_state.get("service"))
+            self._apply_plan_detail(next_state, next_state.get("service"), config)
         clock = time.monotonic()
         propresenter_settings = config.get("propresenter", {})
         propresenter_key = (
@@ -241,12 +280,8 @@ class RuntimeService:
             try:
                 detail = self._planning_center_detail_task.result()
                 if str(detail.get("id") or "") == str((next_state.get("service") or {}).get("id") or ""):
-                    next_state.update({
-                        "service": detail,
-                        "people": detail.get("people", []),
-                        "planning_center": {"connected": True, "error": ""},
-                    })
-                    next_state["timing"] = calculate_timing(detail)
+                    self._apply_plan_detail(next_state, detail, config)
+                    next_state["planning_center"] = {"connected": True, "error": ""}
             except Exception as exc:
                 next_state["planning_center"] = {"connected": False, "error": str(exc)}
             finally:
@@ -267,8 +302,8 @@ class RuntimeService:
                 candidates = await pc.candidate_plans()
                 active = pc.select_plan(candidates, config.get("manual_plan"))
                 detail = await pc.plan_detail(active) if active else None
-                next_state.update({"plans": candidates, "service": detail, "people": detail.get("people", []) if detail else [], "planning_center": {"connected": True, "error": ""}})
-                next_state["timing"] = calculate_timing(detail)
+                next_state.update({"plans": candidates, "planning_center": {"connected": True, "error": ""}})
+                self._apply_plan_detail(next_state, detail, config)
                 media_by_title = {}
                 media_errors = []
                 for media_title in configured_media_titles:
@@ -284,11 +319,18 @@ class RuntimeService:
                     "error": "; ".join(media_errors),
                 }
                 tagged_resources = {}
+                tag_sync_complete = True
                 for tag_id in configured_resource_tags:
                     try:
                         tagged_resources[tag_id] = await pc.media_for_tag(tag_id)
                     except Exception as media_exc:
                         media_errors.append(f"tag {tag_id}: {media_exc}")
+                        tag_sync_complete = False
+                if tag_sync_complete:
+                    try:
+                        tagged_resources = await self.media_cache.sync(pc, tagged_resources)
+                    except Exception as media_exc:
+                        media_errors.append(f"local resource cache: {media_exc}")
                 next_state["planning_center_resources"] = tagged_resources
             except Exception as exc:
                 next_state["planning_center"] = {"connected": False, "error": str(exc)}
@@ -707,7 +749,7 @@ class RuntimeService:
                 item["live_end_at"] = live.get("current_live_end_at")
             elif item.get("live_start_at") and not item.get("live_end_at") and current_start:
                 item["live_end_at"] = current_start
-        timing = calculate_timing(service)
+        timing = calculate_timing(service, service_time_id=str((state.get("timing") or {}).get("service_time_id") or ""))
         visible_items = timing.get("service_items") or service.get("items") or []
         current_index = next((index for index, item in enumerate(visible_items) if str(item.get("id")) == current_id), -1)
         if current_index >= 0:

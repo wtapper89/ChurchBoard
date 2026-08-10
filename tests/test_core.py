@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import asyncio
+import base64
+import json
 import tempfile
 import unittest
 from datetime import datetime, timedelta, timezone
@@ -8,7 +10,10 @@ from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
 from app.models import Dashboard
-from app.services.planning_center import PlanningCenterClient, calculate_timing, consolidate_people, item_leader, position_key, selected_service_time, service_items
+from app.services.planning_center import PlanningCenterClient, calculate_timing, consolidate_people, item_leader, people_for_service_time, position_key, selected_service_time, service_items
+from app.services.livekit import HostedIntercomServer, access_token
+from app.services.ndi import NDIRuntime
+from app.services.media_cache import PlanningCenterMediaCache
 from app.services.shure import ShureClient, battery_percent, percent, transmitter_active
 from app.services.sennheiser import parse_ssc_response, ssc_request
 from app.services.propresenter import ProPresenterClient
@@ -44,6 +49,10 @@ class StoreTests(unittest.TestCase):
             self.assertTrue(slides["show_parts"])
             self.assertNotIn("theme", store.load()["dashboards"][0])
             self.assertEqual(store.load()["settings"]["planning_center"]["service_types"], [])
+            self.assertEqual(store.load()["settings"]["server"]["producer_port"], 80)
+            self.assertTrue(store.load()["settings"]["server"]["producer_port_enabled"])
+            self.assertEqual(store.load()["settings"]["intercom"]["party_lines"][0]["id"], "production")
+            self.assertFalse(store.load()["settings"]["ndi"]["enabled"])
 
     def test_light_theme_migrates_to_dark_customizable_background(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -88,6 +97,7 @@ class StoreTests(unittest.TestCase):
             data = store.load()
             data["settings"]["planning_center"]["secret"] = "do-not-return"
             data["settings"]["restream"]["access_token"] = "also-do-not-return"
+            data["settings"]["intercom"]["api_secret"] = "livekit-secret"
             store.save(data)
             public = store.public_settings()["planning_center"]
             self.assertEqual(public["secret"], "")
@@ -95,6 +105,41 @@ class StoreTests(unittest.TestCase):
             restream = store.public_settings()["restream"]
             self.assertEqual(restream["access_token"], "")
             self.assertTrue(restream["access_token_configured"])
+            intercom = store.public_settings()["intercom"]
+            self.assertEqual(intercom["api_secret"], "")
+            self.assertTrue(intercom["api_secret_configured"])
+            self.assertEqual(intercom["api_key"], "")
+            self.assertEqual(intercom["url"], "")
+
+    def test_ndi_sdk_root_resolves_the_nested_macos_runtime(self):
+        with patch("app.services.ndi.platform.system", return_value="Darwin"):
+            candidates = [str(path) for path in NDIRuntime._candidates("/Library/NDI SDK for Apple")]
+        self.assertIn("/Library/NDI SDK for Apple/lib/macOS/libndi.dylib", candidates)
+
+    def test_livekit_token_has_audio_room_grant_and_role_metadata(self):
+        token = access_token(
+            "api-key", "api-secret", "churchboard-user-1", "Jordan Lee",
+            "churchboard-production", {"role": "admin", "party_line_id": "production"},
+        )
+        encoded_payload = token.split(".")[1]
+        encoded_payload += "=" * (-len(encoded_payload) % 4)
+        payload = json.loads(base64.urlsafe_b64decode(encoded_payload))
+        self.assertEqual(payload["iss"], "api-key")
+        self.assertEqual(payload["sub"], "churchboard-user-1")
+        self.assertEqual(payload["video"]["room"], "churchboard-production")
+        self.assertTrue(payload["video"]["canPublish"])
+        self.assertEqual(payload["video"]["canPublishSources"], ["microphone"])
+        self.assertEqual(json.loads(payload["metadata"])["role"], "admin")
+
+    def test_hosted_intercom_config_uses_fixed_local_ports_and_private_credentials(self):
+        with tempfile.TemporaryDirectory() as directory:
+            service = HostedIntercomServer(Path(directory) / "churchboard.json")
+            config = service._write_config("churchboard-key", "12345678901234567890123456789012")
+            contents = config.read_text(encoding="utf-8")
+            self.assertIn("port: 7880", contents)
+            self.assertIn("tcp_port: 7881", contents)
+            self.assertIn("udp_port: 7882", contents)
+            self.assertIn('"churchboard-key": "12345678901234567890123456789012"', contents)
 
     def test_restream_client_normalizes_live_event_and_destinations(self):
         client = RestreamClient({"enabled": True, "access_token": "token"})
@@ -138,6 +183,25 @@ class PlanningCenterTests(unittest.TestCase):
         self.assertEqual([position["name"] for position in people[0]["positions"]], ["Acoustic Guitar", "Vocals"])
         self.assertEqual(people[0]["position_keys"], ["band::acoustic guitar", "band::vocals"])
 
+    def test_people_are_filtered_for_the_selected_service_time(self):
+        people = consolidate_people([
+            {"id": "john-row", "person_id": "john", "name": "John", "position": "Vox 1", "position_key": "band::vox 1", "team_id": "band", "team_name": "Band", "service_time_ids": ["early", "middle"]},
+            {"id": "will-row", "person_id": "will", "name": "Will", "position": "Vox 1", "position_key": "band::vox 1", "team_id": "band", "team_name": "Band", "service_time_ids": ["late"]},
+            {"id": "jane-row", "person_id": "jane", "name": "Jane", "position": "Vox 2", "position_key": "band::vox 2", "team_id": "band", "team_name": "Band", "service_time_ids": []},
+        ])
+        self.assertEqual([person["name"] for person in people_for_service_time(people, "early")], ["John", "Jane"])
+        self.assertEqual([person["name"] for person in people_for_service_time(people, "late")], ["Will", "Jane"])
+
+    def test_time_specific_secondary_position_stays_available_for_assignment_cards(self):
+        people = consolidate_people([
+            {"id": "will-vox2", "person_id": "will", "name": "Will", "position": "Vox 2", "position_key": "band::vox 2", "team_id": "band", "team_name": "Band", "service_time_ids": []},
+            {"id": "will-vox1", "person_id": "will", "name": "Will", "position": "Vox 1", "position_key": "band::vox 1", "team_id": "band", "team_name": "Band", "service_time_ids": ["late"]},
+        ])
+        early = people_for_service_time(people, "early")[0]
+        late = people_for_service_time(people, "late")[0]
+        self.assertEqual(early["position_keys"], ["band::vox 2"])
+        self.assertEqual(late["position_keys"], ["band::vox 2", "band::vox 1"])
+
     def test_manual_plan_wins(self):
         client = PlanningCenterClient({"open_days_before": 0, "open_hours_before": 0, "close_hours_after": 0})
         plans = [{"id": "1", "service_type_id": "a", "starts_at": "2030-01-01T00:00:00+00:00"}, {"id": "2", "service_type_id": "b", "starts_at": "2030-01-02T00:00:00+00:00"}]
@@ -151,6 +215,7 @@ class PlanningCenterTests(unittest.TestCase):
         self.assertEqual(selected_service_time(plan, datetime(2030, 1, 6, 12, 0, tzinfo=timezone.utc))["id"], "early")
         self.assertEqual(selected_service_time(plan, datetime(2030, 1, 6, 14, 45, tzinfo=timezone.utc))["id"], "late")
         self.assertEqual(selected_service_time(plan, datetime(2030, 1, 6, 16, 15, tzinfo=timezone.utc))["id"], "late")
+        self.assertEqual(selected_service_time(plan, datetime(2030, 1, 6, 12, 0, tzinfo=timezone.utc), "late")["id"], "late")
 
     def test_timing_uses_service_specific_exclusions_and_start(self):
         plan = {
@@ -249,7 +314,7 @@ class PlanningCenterCatalogTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(params["where[media_tag_ids][]"], "tag-audio")
             return {
                 "data": [{"id": "media-1", "attributes": {"title": "Audio Instructions", "image_url": "https://example.test/cover.png"}, "relationships": {"attachments": {"data": [{"type": "Attachment", "id": "file-1"}]}}}],
-                "included": [{"type": "Attachment", "id": "file-1", "attributes": {"url": "https://example.test/audio.pdf", "filetype": "pdf", "display_name": "Audio.pdf"}}],
+                "included": [{"type": "Attachment", "id": "file-1", "attributes": {"url": "https://example.test/audio.pdf", "filetype": "pdf", "display_name": "Audio.pdf"}, "links": {"self": "https://api.planningcenteronline.com/services/v2/media/media-1/attachments/file-1"}}],
             }
 
         client._get_all = fake_get_all
@@ -260,6 +325,7 @@ class PlanningCenterCatalogTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(resources[0]["source"], "Planning Center")
         self.assertEqual(resources[0]["inline_url"], "/api/producer/planning-center-media/media-1/content")
         self.assertEqual(resources[0]["filename"], "Audio.pdf")
+        self.assertEqual(resources[0]["download_action_url"], "https://api.planningcenteronline.com/services/v2/media/media-1/attachments/file-1/open")
     async def test_catalog_groups_positions_by_team(self):
         client = PlanningCenterClient({"enabled": True, "application_id": "id", "secret": "secret", "service_type_ids": ["st-1"]})
 
@@ -382,6 +448,47 @@ class PlanningCenterCatalogTests(unittest.IsolatedAsyncioTestCase):
         live = await client.live_status({"id": "plan-1", "service_type_id": "type-1"})
         self.assertTrue(live["can_control"])
         self.assertFalse(live["has_control"])
+
+    async def test_planning_center_media_cache_downloads_and_prunes_removed_media(self):
+        class Response:
+            content = b"%PDF-1.7\nChurchBoard test"
+            headers = {"content-type": "application/pdf"}
+
+            def raise_for_status(self):
+                return None
+
+        class Downloader:
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *_args):
+                return None
+
+            async def get(self, url):
+                self_url = url
+                return Response()
+
+        class Client:
+            async def attachment_download_url(self, action_url):
+                self.action_url = action_url
+                return "https://objects.example.test/audio.pdf"
+
+        with tempfile.TemporaryDirectory() as directory:
+            cache = PlanningCenterMediaCache(Path(directory) / "state.json")
+            client = Client()
+            resource = {
+                "id": "media-1", "title": "Audio Instructions", "filename": "Audio.pdf",
+                "content_type": "application/pdf", "download_action_url": "https://api.example.test/attachment/open",
+            }
+            with patch("app.services.media_cache.httpx.AsyncClient", return_value=Downloader()):
+                result = await cache.sync(client, {"tag-audio": [resource]})
+            cached = cache.file_for("media-1")
+            self.assertTrue(result["tag-audio"][0]["cached"])
+            self.assertEqual(client.action_url, resource["download_action_url"])
+            self.assertIsNotNone(cached)
+            self.assertEqual(cached[0].read_bytes(), Response.content)
+            await cache.sync(client, {})
+            self.assertIsNone(cache.file_for("media-1"))
 
 
 class ShureTests(unittest.TestCase):

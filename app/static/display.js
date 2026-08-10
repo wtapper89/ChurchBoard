@@ -1,4 +1,4 @@
-let dashboard,lastState={},serverInstance="",refreshInFlight=false,planOptionsKey="",planSelectionInFlight=false,lastFullRefresh=0,compactEtag="",ppKeyboardInFlight=false;
+let dashboard,lastState={},serverInstance="",refreshInFlight=false,planOptionsKey="",serviceTimeOptionsKey="",planSelectionInFlight=false,lastFullRefresh=0,compactEtag="",ppKeyboardInFlight=false;
 const widgetRenderKeys=new Map();
 const orderScrollPositions=new Map();
 const playlistScrollPositions=new Map();
@@ -121,6 +121,7 @@ function widgetStateKey(widget,state){
   if(widget.type==="restream")return`restream:${JSON.stringify(state.restream||{})}`;
   if(widget.type==="livestreams")return`livestreams:${JSON.stringify([state.livestreams||[],settings.sources||[]])}`;
   if(widget.type==="propresenter_timers")return`propresenter-timers:${JSON.stringify(pp.timers||[])}`;
+  if(widget.type==="ndi")return`ndi:${settings.source_name||""}`;
   return`${widget.type}:${JSON.stringify(state)}`;
 }
 function updatePlaylistLiveState(root=document){const pp=lastState.propresenter||{},uuid=String(pp.presentation_uuid||""),slide=Number(pp.current?.index)||0;root.querySelectorAll('[data-widget-type="playlist"]').forEach(widget=>{const widgetId=String(widget.dataset.widget||""),key=`${uuid}:${slide}`;widget.querySelectorAll("[data-pp-item-uuid]").forEach(item=>{const active=String(item.dataset.ppItemUuid||"")===uuid;item.classList.toggle("active",active);const status=item.querySelector("[data-pp-item-status]");if(status)status.textContent=active?"On air":status.dataset.idleLabel||""});widget.querySelectorAll("[data-pp-slide-uuid]").forEach(item=>item.classList.toggle("active",String(item.dataset.ppSlideUuid||"")===uuid&&Number(item.dataset.ppSlideNumber)===slide));if(playlistActiveKeys.get(widgetId)===key)return;playlistActiveKeys.set(widgetId,key);const configured=(dashboard?.widgets||[]).find(item=>String(item.id)===widgetId);if(configured?.settings?.auto_scroll===false)return;const target=widget.querySelector(".pp-list-slide.active")||widget.querySelector(".pp-list-presentation.active");target?.scrollIntoView({block:"nearest",inline:"nearest",behavior:"smooth"})})}
@@ -175,7 +176,9 @@ function updatePlans(){
   if(planSelectionInFlight)return;
   const manual=lastState.manual_plan,desired=manual?`${manual.service_type_id}:${manual.id}`:"";
   if(select.value!==desired)select.value=desired;
+  updateServiceTimes();
 }
+function updateServiceTimes(){const select=document.querySelector("#active-service-time"),service=lastState.service||{},times=service.times||[],key=JSON.stringify(times.map(row=>[row.id,row.name,row.starts_at]));if(key!==serviceTimeOptionsKey){select.innerHTML='<option value="">Automatic for current time</option>'+times.map(row=>`<option value="${escapeHtml(String(row.id||""))}">${escapeHtml(row.name||new Date(row.starts_at).toLocaleTimeString([],{hour:"numeric",minute:"2-digit"}))}</option>`).join("");serviceTimeOptionsKey=key}const manual=lastState.manual_service_time||{};select.value=String(manual.plan_id||"")===String(service.id||"")?String(manual.id||""):"";select.disabled=!times.length}
 document.querySelector("#active-plan").addEventListener("change",async event=>{
   const select=event.currentTarget,status=document.querySelector("#active-plan-status"),[service_type_id,id]=select.value.split(":");
   planSelectionInFlight=true;select.disabled=true;status.textContent="Selecting service…";
@@ -183,5 +186,6 @@ document.querySelector("#active-plan").addEventListener("change",async event=>{
   catch(error){status.textContent=error.message}
   finally{planSelectionInFlight=false;select.disabled=false;updatePlans()}
 });
+document.querySelector("#active-service-time").addEventListener("change",async event=>{const select=event.currentTarget,status=document.querySelector("#active-service-time-status");select.disabled=true;status.textContent="Selecting service time…";try{lastState=await api("/api/active-service-time",{method:"PUT",body:JSON.stringify({id:select.value||null,plan_id:lastState.service?.id||null})});render();status.textContent="";setMenuOpen(false)}catch(error){status.textContent=error.message}finally{select.disabled=false;updateServiceTimes()}});
 api("/api/dashboards").then(data=>document.querySelector("#board-links").innerHTML=data.items.map(item=>`<div class="board-menu-row"><a class="board-menu-open" href="/display/${encodeURIComponent(item.slug)}">${escapeHtml(item.name)}</a><a class="board-menu-edit" href="/editor/${encodeURIComponent(item.slug)}" aria-label="Edit ${escapeHtml(item.name)}">Edit</a></div>`).join(""));
 checkServerInstance();loadBoard(); setInterval(refresh,150); setInterval(tickClocks,250);setInterval(checkServerInstance,5000);

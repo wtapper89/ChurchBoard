@@ -65,9 +65,12 @@ def default_data() -> dict[str, Any]:
             },
             "restream": {"enabled": False, "client_id": "", "client_secret": "", "access_token": "", "refresh_token": "", "access_token_expires_at": 0, "refresh_seconds": 5},
             "obs": {"enabled": False, "host": "127.0.0.1", "port": 4455, "password": "", "refresh_seconds": 0.5, "dropped_frames_threshold": 2, "preview_url": ""},
-            "server": {"port": 8040, "https_enabled": False, "ssl_certfile": "", "ssl_keyfile": ""},
+            "ndi": {"enabled": False, "runtime_directory": ""},
+            "intercom": {"enabled": False, "hosted": True, "url": "", "api_key": "", "api_secret": "", "party_lines": [{"id": "production", "name": "Production"}]},
+            "server": {"port": 8040, "producer_port_enabled": True, "producer_port": 80, "https_enabled": False, "ssl_certfile": "", "ssl_keyfile": ""},
             "position_mic_map": {"Vox 1": "mic-1", "Vox 2": "mic-2"},
             "manual_plan": None,
+            "manual_service_time": None,
         },
         "dashboards": [
             {"id": "main", "name": "Main", "slug": "main", "background_color": "#0a0d12", "columns": 12, "row_height": 72, "widgets": main_widgets},
@@ -109,7 +112,7 @@ class ConfigStore:
             baseline = default_data()
             baseline.update(raw)
             baseline["settings"] = {**default_data()["settings"], **raw.get("settings", {})}
-            for section in ("planning_center", "propresenter", "shure", "sennheiser", "open_sound_meter", "restream", "obs", "server"):
+            for section in ("planning_center", "propresenter", "shure", "sennheiser", "open_sound_meter", "restream", "obs", "ndi", "intercom", "server"):
                 baseline["settings"][section] = {
                     **default_data()["settings"][section],
                     **raw.get("settings", {}).get(section, {}),
@@ -161,6 +164,8 @@ class ConfigStore:
                         widget["settings"] = {"item_title": "Message", "field_name": "Vocals", "font_scale": 100, **widget.get("settings", {})}
                     if widget.get("type") == "livestreams":
                         widget["settings"] = {"sources": [], **widget.get("settings", {})}
+                    if widget.get("type") == "ndi":
+                        widget["settings"] = {"source_name": "", **widget.get("settings", {})}
                     if widget.get("type") == "order":
                         widget["settings"] = {"display_mode": "current", "limit": 6, "show_leader": False, "show_mic": False, **widget.get("settings", {})}
                     if widget.get("type") == "spl":
@@ -197,4 +202,9 @@ class ConfigStore:
         obs = settings.get("obs", {})
         obs["password_configured"] = bool(obs.get("password"))
         obs["password"] = ""
+        intercom = settings.get("intercom", {})
+        intercom["api_secret_configured"] = bool(intercom.get("api_secret"))
+        intercom["api_key"] = ""
+        intercom["api_secret"] = ""
+        intercom["url"] = ""
         return settings

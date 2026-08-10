@@ -3,6 +3,7 @@ set -euo pipefail
 
 REPOSITORY="${CHURCHBOARD_REPOSITORY:-wtapper89/ChurchBoard}"
 REF="${CHURCHBOARD_REF:-main}"
+LIVEKIT_VERSION="1.13.5"
 ENABLE_KIOSK=false
 
 usage() {
@@ -79,6 +80,25 @@ restore_previous_install() {
 
 mkdir -p "$INSTALL_DIR"
 /bin/cp -R "$SOURCE_DIR/app" "$SOURCE_DIR/run.py" "$SOURCE_DIR/requirements.txt" "$INSTALL_DIR/"
+
+case "$(uname -m)" in
+  aarch64|arm64) LIVEKIT_ARCH="arm64"; LIVEKIT_SHA256="332015305518765fe05bad74fc3a9d9583e635e7dd130de3c4fc563d69c550f3" ;;
+  armv7l|armv7) LIVEKIT_ARCH="armv7"; LIVEKIT_SHA256="6dceb15fec3b2b90a67615acff7f92a48a901408f31c74f3d290a7d4277f76bd" ;;
+  x86_64|amd64) LIVEKIT_ARCH="amd64"; LIVEKIT_SHA256="c020fac437b7cc9b776eef1ad5ea8af77be9acfa07602eca20a3a44930dfbc70" ;;
+  *) LIVEKIT_ARCH=""; LIVEKIT_SHA256="" ;;
+esac
+if [[ -n "$LIVEKIT_ARCH" ]]; then
+  echo "Installing ChurchBoard's hosted intercom engine…"
+  LIVEKIT_ARCHIVE="$(mktemp)"
+  curl -fsSL "https://github.com/livekit/livekit/releases/download/v${LIVEKIT_VERSION}/livekit_${LIVEKIT_VERSION}_linux_${LIVEKIT_ARCH}.tar.gz" -o "$LIVEKIT_ARCHIVE"
+  echo "$LIVEKIT_SHA256  $LIVEKIT_ARCHIVE" | sha256sum --check --status
+  mkdir -p "$INSTALL_DIR/livekit-server"
+  tar -xzf "$LIVEKIT_ARCHIVE" -C "$INSTALL_DIR/livekit-server"
+  /bin/rm -f "$LIVEKIT_ARCHIVE"
+  chmod 0755 "$INSTALL_DIR/livekit-server/livekit-server"
+else
+  echo "Warning: no hosted intercom engine is published for $(uname -m). The rest of ChurchBoard will still work." >&2
+fi
 
 if ! python3 -m venv "$INSTALL_DIR/.venv"; then
   restore_previous_install

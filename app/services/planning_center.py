@@ -39,7 +39,18 @@ def parse_time(value: str | None) -> datetime | None:
         return None
 
 
-def selected_service_time(plan: dict[str, Any], now: datetime | None = None) -> dict[str, Any] | None:
+def selected_service_time(
+    plan: dict[str, Any],
+    now: datetime | None = None,
+    manual_id: str | None = None,
+) -> dict[str, Any] | None:
+    if manual_id:
+        manual = next(
+            (row for row in plan.get("times") or [] if str(row.get("id") or "") == str(manual_id)),
+            None,
+        )
+        if manual:
+            return manual
     now = now or datetime.now(timezone.utc)
     rows = []
     for row in plan.get("times") or []:
@@ -113,6 +124,7 @@ def consolidate_people(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
             "key": str(row.get("position_key") or ""),
             "team_id": str(row.get("team_id") or ""),
             "team_name": str(row.get("team_name") or ""),
+            "service_time_ids": list(dict.fromkeys(str(value) for value in row.get("service_time_ids") or [] if value)),
         }
         person = by_identity.get(identity)
         if person is None:
@@ -120,13 +132,52 @@ def consolidate_people(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
             by_identity[identity] = person
             people.append(person)
             continue
-        if position["key"] and position["key"] not in person["position_keys"]:
+        existing_position = next(
+            (item for item in person["positions"] if item.get("key") == position["key"]),
+            None,
+        )
+        if existing_position is not None:
+            existing_position["service_time_ids"] = list(dict.fromkeys(
+                [*(existing_position.get("service_time_ids") or []), *position["service_time_ids"]]
+            ))
+        elif position["key"] and position["key"] not in person["position_keys"]:
             person["positions"].append(position)
             person["position_keys"].append(position["key"])
         for field in ("name", "photo", "status"):
             if not person.get(field) and row.get(field):
                 person[field] = row[field]
     return people
+
+
+def people_for_service_time(people: list[dict[str, Any]], service_time_id: str | None) -> list[dict[str, Any]]:
+    """Return only assignments that apply to the selected Planning Center time.
+
+    Planning Center leaves a PlanPerson's service-time relationship empty when
+    that assignment applies to every service. A populated relationship is a
+    per-time exception and must be respected so the same position can be filled
+    by different people at different services.
+    """
+    selected = str(service_time_id or "")
+    result: list[dict[str, Any]] = []
+    for person in people or []:
+        active_positions = []
+        for position in person.get("positions") or []:
+            time_ids = [str(value) for value in position.get("service_time_ids") or [] if value]
+            if not time_ids or (selected and selected in time_ids):
+                active_positions.append({**position, "service_time_ids": time_ids})
+        if not active_positions:
+            continue
+        primary = active_positions[0]
+        result.append({
+            **person,
+            "position": primary.get("name") or "",
+            "position_key": primary.get("key") or "",
+            "team_id": primary.get("team_id") or "",
+            "team_name": primary.get("team_name") or "",
+            "positions": active_positions,
+            "position_keys": [row.get("key") for row in active_positions if row.get("key")],
+        })
+    return result
 
 
 class PlanningCenterClient:
@@ -298,6 +349,8 @@ class PlanningCenterClient:
                 for rel in (((row.get("relationships") or {}).get("attachments") or {}).get("data") or [])
             ]
             attachment_attrs = next(((attachment.get("attributes") or {}) for attachment in attachments if attachment.get("attributes")), {})
+            attachment_row = next((attachment for attachment in attachments if attachment.get("attributes")), {})
+            attachment_self = str((attachment_row.get("links") or {}).get("self") or "")
             url = str(attachment_attrs.get("url") or attachment_attrs.get("linked_url") or "")
             resources.append({
                 "id": str(row.get("id") or ""),
@@ -306,13 +359,27 @@ class PlanningCenterClient:
                 "kind": str(attachment_attrs.get("filetype") or attrs.get("media_type") or "media"),
                 "url": url,
                 "inline_url": f"/api/producer/planning-center-media/{row.get('id')}/content",
-                "filename": str(attachment_attrs.get("display_name") or attrs.get("title") or "Planning Center media"),
+                "filename": str(attachment_attrs.get("filename") or attachment_attrs.get("display_name") or attrs.get("title") or "Planning Center media"),
                 "content_type": str(attachment_attrs.get("content_type") or attachment_attrs.get("content_type_name") or ""),
                 "image_url": str(attrs.get("image_url") or attrs.get("thumbnail_url") or attachment_attrs.get("thumbnail_url") or ""),
                 "source": "Planning Center",
                 "tag_id": str(tag_id),
+                # The API currently exposes only the attachment self link in
+                # compound media responses. POSTing its /open action returns a
+                # short-lived object-storage URL without exposing a PCO login.
+                "download_action_url": f"{attachment_self}/open" if attachment_self else "",
+                "updated_at": str(attachment_attrs.get("updated_at") or attrs.get("updated_at") or ""),
             })
         return resources
+
+    async def attachment_download_url(self, action_url: str) -> str:
+        path = str(action_url or "")
+        if path.startswith(API_ROOT):
+            path = path[len(API_ROOT):]
+        if not path.startswith("/"):
+            return ""
+        payload = await self._post(path)
+        return str((((payload.get("data") or {}).get("attributes") or {}).get("attachment_url")) or "")
 
     async def candidate_plans(self, now: datetime | None = None) -> list[dict[str, Any]]:
         now = now or datetime.now(timezone.utc)
@@ -405,6 +472,12 @@ class PlanningCenterClient:
             person_row = people_included.get((person_rel.get("type", "Person"), person_id), {})
             person_attrs = person_row.get("attributes", {})
             position_name = attrs.get("team_position_name", "")
+            relationships = row.get("relationships") or {}
+            service_time_rows = (
+                ((relationships.get("service_times") or {}).get("data"))
+                or ((relationships.get("times") or {}).get("data"))
+                or []
+            )
             people.append({
                 "id": row["id"],
                 "person_id": person_id,
@@ -415,6 +488,7 @@ class PlanningCenterClient:
                 "team_name": team_name,
                 "photo": person_attrs.get("photo_url") or attrs.get("photo_thumbnail") or person_attrs.get("photo_thumbnail_url") or "",
                 "status": attrs.get("status", ""),
+                "service_time_ids": [str(value.get("id") or "") for value in service_time_rows if value.get("id")],
             })
         people = consolidate_people(people)
         people_by_person_id = {person["person_id"]: person for person in people if person["person_id"]}
@@ -581,11 +655,15 @@ class PlanningCenterClient:
         return await self.live_status({**plan, "series_id": series_id})
 
 
-def calculate_timing(plan: dict[str, Any] | None, now: datetime | None = None) -> dict[str, Any]:
+def calculate_timing(
+    plan: dict[str, Any] | None,
+    now: datetime | None = None,
+    service_time_id: str | None = None,
+) -> dict[str, Any]:
     now = now or datetime.now(timezone.utc)
     if not plan:
         return {"state": "idle", "current_item": None, "next_item": None, "item_delta": 0, "overall_delta": 0}
-    chosen_time = selected_service_time(plan, now)
+    chosen_time = selected_service_time(plan, now, service_time_id)
     start = parse_time(chosen_time.get("starts_at")) if chosen_time else parse_time(plan.get("starts_at"))
     items = service_items(plan, str(chosen_time.get("id") or "") if chosen_time else None)
     timing_context = {

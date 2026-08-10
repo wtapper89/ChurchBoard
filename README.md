@@ -10,6 +10,8 @@ ChurchBoard is a cross-platform production dashboard for churches. It combines P
 
 ChurchBoard 1.4 adds a mobile-friendly Producer workspace with organization accounts and roles, campuses, Planning Center position checklists and tagged-media resources, completion tracking, portable dashboard layouts, configurable HTTP/HTTPS, and a redesigned widget editor. See the [Producer workspace guide](docs/PRODUCER.md).
 
+The **1.5 beta branch** adds automatic per-service-time rosters, a restricted volunteer-only listener, offline-mirrored Planning Center resources, optional NDI® video widgets with SDK auto-detection, and a ChurchBoard-hosted LiveKit Producer party-line intercom. These features remain on the beta branch until field testing is complete; the installer links below continue to point to the stable 1.4 release.
+
 ## Watch the setup and demo video
 
 See ChurchBoard in action and follow the setup walkthrough in the **[ChurchBoard setup and demo video](https://youtu.be/pE_uWD24G2c)**.
@@ -39,6 +41,10 @@ See ChurchBoard in action and follow the setup walkthrough in the **[ChurchBoard
 - A scrollable, resizable sermon-notes widget that selects a named note field from a Planning Center service item
 - A dedicated ProPresenter control pad for previous/next slide and previous/next playlist item
 - A mobile-friendly Producer workspace for position checklists, Planning Center tagged media, embedded resources, files, links, team access, campuses, and an activity trail
+- Automatic or manual Planning Center service-time selection, including a different scheduled person in the same position at different services
+- Optional NDI® source discovery and video widgets that dynamically load the licensed NDI runtime without requiring NDI Tools
+- A restricted second listener for volunteer checklists and Producer tools, with Planning Center tagged media mirrored locally instead of reopening Planning Center
+- Optional, locally hosted LiveKit party-line intercom with no cloud account or server credentials, plus AirPods/headset support, push-to-talk, latch-open microphones, multiple channels, and administrator mute-all
 
 ![ChurchBoard audio-board dashboard](docs/screenshots/audio-board.jpg)
 
@@ -108,7 +114,7 @@ Each dashboard has a stable URL. Add widgets from the palette, drag them on the 
 
 ## Producer workspace
 
-Open `/producer` to manage the selected service, position checklists, embedded Planning Center resources, users, campuses, and activity. Existing installations remain usable without sign-in until the first owner account is created. See the [Producer workspace guide](docs/PRODUCER.md) for roles, optional passwords, Planning Center matching, mobile use, and backup guidance.
+Open `/producer` to manage the selected service and service time, position checklists, locally mirrored Planning Center resources, users, campuses, and activity. The separate volunteer listener defaults to port 80 and intentionally excludes dashboards and Setup; choose another unprivileged port such as 8080 when the operating system will not allow port 80. Existing installations remain usable without sign-in until the first owner account is created. See the [Producer workspace guide](docs/PRODUCER.md) for roles, optional passwords, Planning Center matching, mobile use, and backup guidance, and [NDI video and Producer intercom](docs/NDI_AND_INTERCOM.md) for the beta media and communications setup.
 
 ![ChurchBoard Producer workspace](docs/screenshots/producer-workspace.jpg)
 

@@ -17,7 +17,7 @@ import webbrowser
 from app.config import load_config
 import uvicorn
 
-from app.main import app, run
+from app.main import app, producer_portal_app, run
 from app.macos import install_and_start_launch_agent
 from app.version import __version__
 
@@ -191,11 +191,39 @@ def run_with_desktop_tray() -> None:
     app.state.desktop_tray = True
     server_thread = threading.Thread(target=server.run, name="ChurchBoard server", daemon=True)
     server_thread.start()
+    portal_server = None
+    portal_thread = None
+    if config.producer_port_enabled and config.producer_port != config.port:
+        portal_server = uvicorn.Server(
+            uvicorn.Config(
+                producer_portal_app,
+                host=config.host,
+                port=config.producer_port,
+                reload=False,
+                lifespan="off",
+                access_log=False,
+                log_config=desktop_log_config(config.data_file),
+                ssl_certfile=str(config.ssl_certfile) if config.ssl_certfile else None,
+                ssl_keyfile=str(config.ssl_keyfile) if config.ssl_keyfile else None,
+            )
+        )
+        def start_portal_when_ready() -> None:
+            deadline = time.monotonic() + 20
+            while time.monotonic() < deadline and not hasattr(app.state, "runtime"):
+                time.sleep(0.05)
+            if hasattr(app.state, "runtime"):
+                portal_server.run()
+        portal_thread = threading.Thread(target=start_portal_when_ready, name="ChurchBoard producer portal", daemon=True)
+        portal_thread.start()
     try:
         tray.run()
     finally:
         server.should_exit = True
+        if portal_server is not None:
+            portal_server.should_exit = True
         server_thread.join(timeout=10)
+        if portal_thread is not None:
+            portal_thread.join(timeout=5)
 
 
 if __name__ == "__main__":

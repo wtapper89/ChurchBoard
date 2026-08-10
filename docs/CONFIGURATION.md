@@ -26,6 +26,8 @@ The token user needs access to the selected Services plans. Viewer access is a r
 
 The service-type name and ID are saved together. If Planning Center temporarily cannot be reached, ChurchBoard retains the last saved display name instead of replacing it with a blank label.
 
+ChurchBoard also selects the active **service time** within that plan. Before a service it prepares the next scheduled time, during a service it uses the active time, and after the final service it retains the last time. Per-time Planning Center assignments are filtered accordingly, so a Vox 1 card can change from the person scheduled at the early services to the person scheduled at the later service. Administrators and editors can temporarily override this from the dashboard menu or Producer workspace; choose **Automatic for current time** to resume automatic selection.
+
 ## 2. Choose positions for a widget
 
 1. From Setup, choose **Edit** for a dashboard.
@@ -192,13 +194,17 @@ ChurchBoard can monitor OBS Studio through its built-in WebSocket server without
 
 The widget reports connection, streaming and recording state, elapsed time, output bitrate/statistics, dropped frames, and the configured preview. Keep OBS and ChurchBoard on the same trusted production network and do not expose the WebSocket port to the internet.
 
-## 13. Configure the web server
+## 13. Add NDI video and Producer intercom
 
-Open **Setup → Web server** to change the listening port or enable direct HTTPS. Supply both the certificate and private-key paths. Restart ChurchBoard after saving. The page will then load using the configured `http://` or `https://` address; desktop and tray launch actions follow the same scheme and port.
+NDI video widgets discover an advertised source name and show its program image without requiring NDI Tools. ChurchBoard auto-detects the separately licensed NDI runtime from a standard SDK installation or from a custom SDK-root path. The Producer workspace can also join one or more ChurchBoard-hosted LiveKit audio party lines with push-to-talk, latch-open, and administrator mute-all—there are no external server credentials to configure. See **[NDI video and Producer intercom](NDI_AND_INTERCOM.md)** for the direct SDK download, installation, discovery diagnostics, HTTPS, and intercom network requirements.
+
+## 14. Configure the web server
+
+Open **Setup → Web server** to change the listening port or enable direct HTTPS. The primary port hosts dashboards and configuration. Enable the separate Producer listener to expose only sign-in, checklists, locally mirrored resources, and Producer tools to volunteers; it defaults to port 80 and rejects dashboard/editor/setup routes. Supply both the certificate and private-key paths. Restart ChurchBoard after saving. Both listeners then use the configured `http://` or `https://` scheme; desktop and tray launch actions follow the primary scheme and port.
 
 Ports range from 1–65535. Port 80 is accepted, but macOS and Linux normally restrict ports below 1024. A reverse proxy on 80/443 is preferable to running ChurchBoard with elevated privileges. Keep the service on a trusted network and never commit the TLS private key.
 
-## 14. Open displays
+## 15. Open displays
 
 Each dashboard has its own **Background color** picker at the top of the editor. The dashboard background, translucent liquid-glass widget surfaces, reflections, borders, and interface accents follow that color. Operational mic and SPL states remain green, yellow, or red so warnings are still immediately recognizable.
 

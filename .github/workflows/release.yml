@@ -8,6 +8,9 @@ on:
 permissions:
   contents: write
 
+env:
+  LIVEKIT_VERSION: v1.13.5
+
 jobs:
   macos:
     strategy:
@@ -21,6 +24,15 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
+      - uses: actions/setup-go@v6
+        with:
+          go-version: "1.26.x"
+          cache: false
+      - name: Build hosted intercom engine
+        run: |
+          git clone --depth 1 --branch "$LIVEKIT_VERSION" https://github.com/livekit/livekit.git "$RUNNER_TEMP/livekit"
+          go -C "$RUNNER_TEMP/livekit" build -trimpath -ldflags="-s -w" -o "$RUNNER_TEMP/livekit-server" ./cmd/server
+          echo "CHURCHBOARD_LIVEKIT_SERVER_PATH=$RUNNER_TEMP/livekit-server" >> "$GITHUB_ENV"
       - run: chmod +x installers/macos/build.sh "installers/macos/Uninstall ChurchBoard.command"
       - run: PYTHON=python3 installers/macos/build.sh
         env:
@@ -43,6 +55,16 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
+      - uses: actions/setup-go@v6
+        with:
+          go-version: "1.26.x"
+          cache: false
+      - name: Build hosted intercom engine
+        shell: powershell
+        run: |
+          git clone --depth 1 --branch $env:LIVEKIT_VERSION https://github.com/livekit/livekit.git "$env:RUNNER_TEMP\livekit"
+          go -C "$env:RUNNER_TEMP\livekit" build -trimpath -ldflags="-s -w" -o "$env:RUNNER_TEMP\livekit-server.exe" ./cmd/server
+          "CHURCHBOARD_LIVEKIT_SERVER_PATH=$env:RUNNER_TEMP\livekit-server.exe" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
       - run: choco install innosetup -y --no-progress
       - shell: powershell
         run: ./installers/windows/Build-Windows.ps1
@@ -59,6 +81,15 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
+      - uses: actions/setup-go@v6
+        with:
+          go-version: "1.26.x"
+          cache: false
+      - name: Build hosted intercom engine
+        run: |
+          git clone --depth 1 --branch "$LIVEKIT_VERSION" https://github.com/livekit/livekit.git "$RUNNER_TEMP/livekit"
+          go -C "$RUNNER_TEMP/livekit" build -trimpath -ldflags="-s -w" -o "$RUNNER_TEMP/livekit-server" ./cmd/server
+          echo "CHURCHBOARD_LIVEKIT_SERVER_PATH=$RUNNER_TEMP/livekit-server" >> "$GITHUB_ENV"
       - run: chmod +x installers/linux/*.sh installers/linux/debian/*
       - run: PYTHON=python3 installers/linux/build.sh
       - uses: actions/upload-artifact@v6

@@ -3,6 +3,20 @@ const api = async (url, options={}) => {
   if (!response.ok) throw new Error((await response.json().catch(()=>({}))).detail || `Request failed (${response.status})`);
   return response.status === 204 ? null : response.json();
 };
+const ChurchBoardModules=window.ChurchBoardModules={
+  catalog:[],widgetOwners:new Map(),renderers:new Map(),loaded:false,
+  registerWidget(type,renderer){if(typeof renderer==="function")this.renderers.set(type,renderer)},
+  rendererFor(type){return this.renderers.get(type)},
+  isInstalledForWidget(type){const owner=this.widgetOwners.get(type);return!owner||this.catalog.some(module=>module.id===owner&&module.installed)},
+};
+async function loadChurchBoardModules(){
+  if(ChurchBoardModules.loaded)return ChurchBoardModules.catalog;
+  try{
+    const result=await api("/api/modules/frontend");ChurchBoardModules.catalog=result.modules||[];
+    for(const module of ChurchBoardModules.catalog){for(const widget of module.widgets||[])ChurchBoardModules.widgetOwners.set(widget.type,module.id);if(!module.installed)continue;for(const href of module.frontend?.styles||[]){if(document.querySelector(`link[data-module-asset="${CSS.escape(href)}"]`))continue;const link=document.createElement("link");link.rel="stylesheet";link.href=href;link.dataset.moduleAsset=href;document.head.append(link)}for(const src of module.frontend?.scripts||[]){if(document.querySelector(`script[data-module-asset="${CSS.escape(src)}"]`))continue;await new Promise((resolve,reject)=>{const script=document.createElement("script");script.src=src;script.dataset.moduleAsset=src;script.onload=resolve;script.onerror=reject;document.head.append(script)})}}
+  }catch(error){console.warn("ChurchBoard module catalog unavailable",error)}
+  ChurchBoardModules.loaded=true;return ChurchBoardModules.catalog;
+}
 const escapeHtml = value => String(value ?? "").replace(/[&<>'"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;",'"':"&quot;"}[c]));
 const formatDuration = seconds => {
   const value = Math.round(Number(seconds)||0), sign=value>0?"+":value<0?"−":"", abs=Math.abs(value);
@@ -160,7 +174,7 @@ const enhanceDynamicContent = (root=document) => {
   if(!root._churchBoardResizeObserver&&window.ResizeObserver){root._churchBoardResizeObserver=new ResizeObserver(()=>resizeDashboardContent(root));root._churchBoardResizeObserver.observe(root)}
 };
 const widgetNames = {clock:"Clock",service:"Service",timing:"Timers",assignments:"Scheduled Positions & Mics",mics:"Scheduled Positions & Mics",slides:"ProPresenter slides",playlist:"ProPresenter playlist",pp_controls:"ProPresenter controls",notes:"Slide notes",sermon_notes:"Sermon notes",order:"Order of service",people:"Team members",spl:"Open Sound Meter",controls:"Service controls",person:"Scheduled person",restream:"Restream livestream",livestreams:"Livestream status",obs:"OBS live monitor",ndi:"NDI® video",propresenter_timers:"ProPresenter timers",text:"Custom text"};
-const widgetMarkup = (widget, state) => {
+const legacyWidgetMarkup = (widget, state) => {
   const settings=widget.settings||{}, service=state.service||{}, timing=state.timing||{}, pp=state.propresenter||{};
   let content="";
   if(widget.type==="playlist") content=propresenterPlaylistMarkup(pp,settings.allow_remote_trigger!==false,settings);
@@ -186,6 +200,15 @@ const widgetMarkup = (widget, state) => {
   if(widget.type==="order"){const scale=Math.max(.5,Math.min(2,Number(settings.font_scale||100)/100));content=content.replace('class="order-layout ',`style="--order-font-scale:${scale}" class="order-layout `)}
   const hideTitle=settings.show_title===false||(widget.type==="slides"&&settings.slide_layout==="previews_only");
   return `<section class="widget ${hideTitle?"widget-title-hidden":""}" data-widget="${escapeHtml(widget.id)}" data-widget-type="${escapeHtml(widget.type)}" style="grid-column:${widget.x+1}/span ${widget.w};grid-row:${widget.y+1}/span ${widget.h}"><div class="widget-heading">${escapeHtml(widget.title||widgetNames[widget.type])}</div><div class="widget-body">${content}</div></section>`;
+};
+const widgetMarkup=(widget,state)=>{
+  const renderer=ChurchBoardModules.rendererFor(widget.type);
+  if(renderer)return renderer(widget,state,{escapeHtml,legacy:legacyWidgetMarkup,widgetNames});
+  if(!ChurchBoardModules.isInstalledForWidget(widget.type)){
+    const owner=ChurchBoardModules.widgetOwners.get(widget.type),module=ChurchBoardModules.catalog.find(item=>item.id===owner);
+    return `<section class="widget module-missing" data-widget="${escapeHtml(widget.id)}" data-widget-type="${escapeHtml(widget.type)}" style="grid-column:${widget.x+1}/span ${widget.w};grid-row:${widget.y+1}/span ${widget.h}"><div class="widget-heading">${escapeHtml(widget.title||module?.name||widget.type)}</div><div class="widget-body"><div class="empty">Add the ${escapeHtml(module?.name||owner||"required")} module to use this widget</div></div></section>`;
+  }
+  return legacyWidgetMarkup(widget,state);
 };
 let lastClockFitMinute="";
 const tickClocks = () => { const now=new Date(),time=now.toLocaleTimeString([],{hour:"numeric",minute:"2-digit",second:"2-digit"}),date=now.toLocaleDateString([],{weekday:"long",month:"long",day:"numeric"}),fitMinute=`${now.getHours()}:${now.getMinutes()}`;document.querySelectorAll("[data-clock]").forEach(el=>{if(el.textContent!==time)el.textContent=time});document.querySelectorAll("[data-date]").forEach(el=>{if(el.textContent!==date)el.textContent=date});document.querySelectorAll("[data-stream-timer]").forEach(el=>{if(el.dataset.streamLive!=="true"){el.textContent="—";return}const started=Date.parse(el.dataset.streamStarted||""),seconds=Number.isFinite(started)?Math.max(0,(Date.now()-started)/1000):Number(el.dataset.streamDuration)||0,value=Math.floor(seconds);el.textContent=`${String(Math.floor(value/3600)).padStart(2,"0")}:${String(Math.floor(value%3600/60)).padStart(2,"0")}:${String(value%60).padStart(2,"0")}`});document.querySelectorAll("[data-ndi-preview]").forEach(image=>{if(image.dataset.loading==="true")return;image.dataset.loading="true";const status=image.parentElement.querySelector("[data-ndi-status]"),done=available=>{image.dataset.loading="false";status.hidden=available;status.textContent=available?"":"Preview unavailable · check the NDI sender"};image.onload=()=>done(true);image.onerror=()=>done(false);image.src=`/api/integrations/ndi/snapshot?source=${encodeURIComponent(image.dataset.ndiSource)}&t=${Date.now()}`});if(fitMinute!==lastClockFitMinute){lastClockFitMinute=fitMinute;requestAnimationFrame(()=>fitWidgetText(document))} };

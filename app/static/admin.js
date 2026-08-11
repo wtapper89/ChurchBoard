@@ -123,4 +123,16 @@ document.querySelector("#create-dashboard").addEventListener("click",async event
 
 document.querySelector("#osm-test").addEventListener("click",async()=>{const status=document.querySelector("#osm-status");status.textContent="Checking OSM multicast…";try{await saveSettings(false);const result=await api("/api/integrations/osm/test",{method:"POST"});status.textContent=result.message}catch(error){status.textContent=error.message}});
 document.querySelector("#ndi-test").addEventListener("click",async()=>{const status=document.querySelector("#ndi-status");status.textContent="Saving and searching for the NDI runtime…";try{sf.ndi_enabled.checked=true;await saveSettings(false);const result=await api("/api/integrations/ndi/sources");if(result.available){const location=result.runtime_path?` · ${result.runtime_path}`:"";status.textContent=result.items?.length?`Runtime found${location} · ${result.items.length} source${result.items.length===1?"":"s"} found`:`Runtime found${location} · no sources advertised yet`;if(!sf.ndi_runtime_directory.value&&result.runtime_path)sf.ndi_runtime_directory.value=result.runtime_path}else status.textContent=result.error||"NDI runtime not found"}catch(error){status.textContent=error.message}});
-loadDashboards();loadSettings();
+function focusModuleConfiguration(){
+  const target={
+    "planning-center":"Planning Center","propresenter":"ProPresenter","restream":"Restream",
+    "obs-studio":"OBS Studio","ndi-video":"NDI® video","producer-intercom":"Producer intercom",
+    "wireless-microphones":"Wireless microphones","open-sound-meter":"Open Sound Meter"
+  }[location.hash.slice(1)];
+  if(!target)return;
+  const fieldset=[...document.querySelectorAll("fieldset")].find(item=>item.querySelector("legend")?.textContent.trim()===target);
+  if(!fieldset)return;
+  fieldset.id=location.hash.slice(1);requestAnimationFrame(()=>fieldset.scrollIntoView({behavior:"smooth",block:"start"}));
+}
+window.addEventListener("hashchange",focusModuleConfiguration);
+loadDashboards();loadSettings().then(focusModuleConfiguration);

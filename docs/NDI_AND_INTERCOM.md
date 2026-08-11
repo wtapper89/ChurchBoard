@@ -31,12 +31,14 @@ ChurchBoard includes and manages its own open-source LiveKit server for WebRTC a
 1. In **Setup → Producer intercom**, enable the ChurchBoard-hosted intercom.
 2. List one party-line name per line. A new installation starts with **Production**.
 3. Save. ChurchBoard generates private credentials, starts the audio engine, and reports when it is ready.
-4. Open the Producer workspace, choose a channel, and select **Join**.
-5. Hold **Push to talk**, or turn on **Lock mic open**. Administrators can select **Close all mics** to mute every connected ChurchBoard client.
+4. Open the Producer workspace, choose a channel, and select **Join**. Joining is also the user gesture that unlocks headset playback on iPhone and iPad. If iOS still blocks autoplay, select the displayed **Enable headset audio** button once.
+5. Hold the large **Push to talk** control, or turn on **Lock mic open**. The PTT control handles touch, pen, and mouse input and releases the microphone when the page loses focus. Administrators can select **Close all mics** to mute every connected ChurchBoard client.
 
 The signaling connection is proxied through the same ChurchBoard HTTP/HTTPS address used by the Producer workspace. The private LiveKit signaling listener stays on the ChurchBoard computer. Browsers receive a short-lived, room-scoped token; the generated API secret never leaves ChurchBoard. Administrator mute-all commands are accepted only when the sender's signed participant metadata identifies an administrator.
 
-Mobile Safari and Chrome allow microphone access only in a secure context. Use ChurchBoard's HTTPS settings or an HTTPS reverse proxy; plain HTTP on another computer or phone cannot use the intercom microphone.
+Mobile Safari and Chrome allow microphone access only in a secure context. Use ChurchBoard's HTTPS settings or an HTTPS reverse proxy; plain HTTP on another computer or phone cannot use the intercom microphone. Chrome on iPhone uses Apple's WebKit media engine, so the same iOS playback-unlock rule applies to both browsers.
+
+If PTT connects but reports that the microphone is blocked, allow microphone access for the ChurchBoard site in the browser's site settings. On iPhone, also check the browser's Microphone permission under the Settings app, then reload Producer and rejoin the party line.
 
 On the production LAN, allow ChurchBoard through the operating-system firewall. The hosted engine uses TCP `7881` as a WebRTC fallback and UDP `7882` for encrypted media. The HTTP/WebSocket signaling connection uses ChurchBoard's normal dashboard or Producer-workspace port. Remote use across the public internet still requires professional TLS, TURN, firewall, and network design; the automatic hosted mode is designed first for devices on the same church production network.
 

@@ -10,7 +10,7 @@ ChurchBoard is a cross-platform production dashboard for churches. It combines P
 
 ChurchBoard 1.4 adds a mobile-friendly Producer workspace with organization accounts and roles, campuses, Planning Center position checklists and tagged-media resources, completion tracking, portable dashboard layouts, configurable HTTP/HTTPS, and a redesigned widget editor. See the [Producer workspace guide](docs/PRODUCER.md).
 
-The **1.5 beta branch** adds automatic per-service-time rosters, a restricted volunteer-only listener, offline-mirrored Planning Center resources, optional NDI® video widgets with SDK auto-detection, and a ChurchBoard-hosted LiveKit Producer party-line intercom. These features remain on the beta branch until field testing is complete; the installer links below continue to point to the stable 1.4 release.
+The private **ChurchBoard 2 beta branch** adds a Companion-style module manager, dependency-aware integration installation, module-owned page/widget hooks, automatic per-service-time rosters, a restricted volunteer-only listener, offline-mirrored Planning Center resources, optional NDI® video, and a ChurchBoard-hosted LiveKit Producer party-line intercom. See [ChurchBoard 2 modules](docs/MODULES.md). These features remain private while they are field-tested; the installer links below continue to point to the stable release.
 
 ## Watch the setup and demo video
 
@@ -45,6 +45,7 @@ See ChurchBoard in action and follow the setup walkthrough in the **[ChurchBoard
 - Optional NDI® source discovery and video widgets that dynamically load the licensed NDI runtime without requiring NDI Tools
 - A restricted second listener for volunteer checklists and Producer tools, with Planning Center tagged media mirrored locally instead of reopening Planning Center
 - Optional, locally hosted LiveKit party-line intercom with no cloud account or server credentials, plus AirPods/headset support, push-to-talk, latch-open microphones, multiple channels, and administrator mute-all
+- A friendly module manager that installs required integrations automatically, keeps each module's setup guide and update policy together, and lets module-owned pages and widgets extend ChurchBoard without adding a new base widget type
 
 ![ChurchBoard audio-board dashboard](docs/screenshots/audio-board.jpg)
 

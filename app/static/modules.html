@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <title>Modules · ChurchBoard</title>
+  <link rel="icon" type="image/png" href="/static/churchboard-icon.png">
+  <link rel="stylesheet" href="/static/style.css">
+  <link rel="stylesheet" href="/static/modules.css">
+</head>
+<body class="modules-page">
+  <header class="topbar">
+    <a class="brand" href="/desktop"><img src="/static/churchboard-icon.png" alt="">ChurchBoard</a>
+    <nav class="module-nav"><a href="/desktop">Boards</a><a href="/admin">System setup</a><a class="active" href="/modules">Modules</a><a href="/producer">Producer</a></nav>
+  </header>
+  <main class="modules-shell">
+    <section class="modules-hero glass">
+      <div><p class="eyebrow">CHURCHBOARD 2 PRIVATE BETA</p><h1>Modules</h1><p>Install only the integrations and page features you need. ChurchBoard adds required modules automatically and keeps each module’s pages, widgets, setup guide, and data contracts together.</p></div>
+      <div class="module-summary" id="module-summary"><strong>—</strong><span>modules installed</span></div>
+    </section>
+    <section class="module-toolbar">
+      <label class="module-search">Find a module<input id="module-search" type="search" placeholder="Planning Center, NDI, intercom…"></label>
+      <label>Category<select id="module-category"><option value="">All categories</option></select></label>
+      <label class="module-toggle"><input id="module-installed-only" type="checkbox"><span>Installed only</span></label>
+      <button id="module-refresh" class="button secondary" type="button">Check for module updates</button>
+    </section>
+    <p id="module-status" class="form-status" role="status"></p>
+    <div id="module-groups" class="module-groups"><p class="muted">Loading modules…</p></div>
+  </main>
+  <dialog id="module-details" class="module-dialog">
+    <div class="module-dialog-heading"><div><p class="eyebrow" id="module-detail-vendor"></p><h2 id="module-detail-name"></h2></div><button id="module-detail-close" class="icon-button" type="button" aria-label="Close">×</button></div>
+    <p id="module-detail-description"></p>
+    <div id="module-detail-dependencies"></div>
+    <section><h3>Setup guide</h3><ol id="module-detail-setup" class="module-setup-list"></ol></section>
+    <section id="module-detail-contracts-section"><h3>Works with other modules through</h3><div id="module-detail-contracts" class="module-contracts"></div></section>
+    <section id="module-detail-widgets-section"><h3>Pages and widgets</h3><div id="module-detail-widgets" class="module-capabilities"></div></section>
+    <div class="dialog-actions" id="module-detail-actions"></div>
+  </dialog>
+  <script src="/static/common.js"></script>
+  <script src="/static/modules.js"></script>
+</body>
+</html>

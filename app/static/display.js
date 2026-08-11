@@ -36,6 +36,7 @@ document.addEventListener("keydown",async event=>{
   catch(error){setPlaylistKeyboardStatus(error.message,true)}finally{ppKeyboardInFlight=false}
 });
 async function loadBoard(){
+  await loadChurchBoardModules();
   dashboard=await api(`/api/dashboards/${encodeURIComponent(slug)}`);
   document.title=`${dashboard.name} · ChurchBoard`;
   dashboard.background_color=applyDashboardAppearance(document.body,dashboard.background_color);

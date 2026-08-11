@@ -82,6 +82,38 @@ class ApiTests(unittest.TestCase):
         self.assertIn("<svg", mark.text)
         self.assertTrue(self.client.get("/api/app-info").json()["instance_id"])
 
+    def test_module_manager_and_dependency_lifecycle(self):
+        page = self.client.get("/modules")
+        self.assertEqual(page.status_code, 200)
+        self.assertIn("CHURCHBOARD 2 PRIVATE BETA", page.text)
+        catalog = self.client.get("/api/modules")
+        self.assertEqual(catalog.status_code, 200)
+        self.assertIn("planning-center", {item["id"] for item in catalog.json()["items"]})
+        installed = self.client.post("/api/modules/services-live-bridge/install")
+        self.assertEqual(installed.status_code, 200)
+        items = {item["id"]: item for item in installed.json()["items"]}
+        self.assertTrue(items["services-live-bridge"]["installed"])
+        self.assertTrue(items["planning-center"]["installed"])
+        self.assertTrue(items["propresenter"]["installed"])
+        blocked = self.client.delete("/api/modules/propresenter")
+        self.assertEqual(blocked.status_code, 400)
+        self.assertIn("require ProPresenter", blocked.json()["detail"])
+        self.assertEqual(self.client.delete("/api/modules/services-live-bridge").status_code, 204)
+
+    def test_page_save_installs_widget_module(self):
+        data = self.client.app.state.store.load()
+        data.setdefault("modules", {}).setdefault("installed", {}).pop("ndi-video", None)
+        self.client.app.state.store.save(data)
+        board = self.client.get("/api/dashboards/main").json()
+        board["widgets"].append({
+            "id": "ndi-auto-module", "type": "ndi", "x": 0, "y": 20, "w": 4, "h": 3,
+            "title": "NDI", "settings": {"source_name": "Stage"},
+        })
+        response = self.client.put("/api/dashboards/main", json=board)
+        self.assertEqual(response.status_code, 200)
+        catalog = {item["id"]: item for item in self.client.get("/api/modules").json()["items"]}
+        self.assertTrue(catalog["ndi-video"]["installed"])
+
     def test_desktop_control_lists_boards_and_requires_tray_to_quit(self):
         response = self.client.get("/api/dashboards")
         self.assertEqual(response.status_code, 200)
@@ -116,6 +148,12 @@ class ApiTests(unittest.TestCase):
         producer_script = self.client.get("/static/producer.js").text
         self.assertIn('producerApi("/api/producer/plans")', producer_script)
         self.assertIn("setInterval(refreshPlanChoices,5000)", producer_script)
+        self.assertIn("room.startAudio()", producer_script)
+        self.assertIn('addEventListener("touchstart",pressIntercom,{passive:false})', producer_script)
+        self.assertIn("intercomMicrophoneError", producer_script)
+        producer_css = self.client.get("/static/producer-intercom.css").text
+        self.assertIn("touch-action:none", producer_css)
+        self.assertIn("min-height:64px", producer_css)
         completion = self.client.put("/api/producer/completions", json={"data": {
             "service_id": "demo", "template_id": template["id"], "task_id": template["tasks"][0]["id"],
             "person_id": "person-1", "position_key": "production::audio", "completed": True,

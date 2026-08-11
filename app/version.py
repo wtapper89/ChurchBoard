@@ -1,3 +1,3 @@
 """ChurchBoard release version."""
 
-__version__ = "1.5.0-beta.2"
+__version__ = "2.0.0-beta.1"

@@ -25,6 +25,7 @@ from pydantic import BaseModel, Field
 from app.config import ROOT_DIR, load_config
 from app.auth import AuthManager, password_hash, public_user, require_role, require_user
 from app.models import Dashboard, SettingsUpdate
+from app.modules import ModuleRegistry
 from app.producer import add_activity, producer_context, save_resource, save_template, set_completion
 from app.services.runtime import RuntimeService
 from app.services.spl_reports import SPLReportStore
@@ -115,14 +116,23 @@ class ProducerPayload(BaseModel):
     data: dict = Field(default_factory=dict)
 
 
+class ModulePolicyRequest(BaseModel):
+    auto_update: bool = True
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     config = load_config()
     store = ConfigStore(config.data_file)
+    modules = ModuleRegistry()
+    module_data = store.load()
+    if modules.reconcile(module_data):
+        store.save(module_data)
     runtime = RuntimeService(store, SPLReportStore(config.data_file.with_name("spl-samples.jsonl")))
     app.state.instance_id = uuid4().hex
     app.state.store = store
     app.state.auth = AuthManager(store)
+    app.state.modules = modules
     app.state.runtime = runtime
     await runtime.start()
     try:
@@ -304,6 +314,11 @@ async def admin_page() -> FileResponse:
     return FileResponse(ROOT_DIR / "app" / "static" / "admin.html")
 
 
+@app.get("/modules")
+async def modules_page() -> FileResponse:
+    return FileResponse(ROOT_DIR / "app" / "static" / "modules.html")
+
+
 @app.get("/display/{slug}")
 async def display_page(slug: str) -> FileResponse:
     return FileResponse(ROOT_DIR / "app" / "static" / "display.html")
@@ -319,6 +334,89 @@ async def list_dashboards(request: Request) -> dict:
     return {"items": store_from(request).load()["dashboards"]}
 
 
+@app.get("/api/modules/frontend")
+async def module_frontend_catalog(request: Request) -> dict:
+    store = store_from(request)
+    data = store.load()
+    modules: ModuleRegistry = request.app.state.modules
+    changed = modules.reconcile(data)
+    if changed:
+        store.save(data)
+    return modules.public_frontend(data)
+
+
+@app.get("/api/modules")
+async def module_catalog(request: Request) -> dict:
+    require_role(request, "admin")
+    store = store_from(request)
+    data = store.load()
+    modules: ModuleRegistry = request.app.state.modules
+    changed = modules.reconcile(data)
+    if changed:
+        store.save(data)
+    return {"items": modules.catalog(data)}
+
+
+@app.post("/api/modules/{module_id}/install")
+async def install_module(module_id: str, request: Request) -> dict:
+    require_role(request, "admin")
+    store = store_from(request)
+    data = store.load()
+    modules: ModuleRegistry = request.app.state.modules
+    try:
+        added = modules.install(data, module_id)
+    except KeyError:
+        raise HTTPException(404, "Module not found")
+    store.save(data)
+    return {"installed": added, "items": modules.catalog(data)}
+
+
+@app.post("/api/modules/{module_id}/update")
+async def update_module(module_id: str, request: Request) -> dict:
+    require_role(request, "admin")
+    store = store_from(request)
+    data = store.load()
+    modules: ModuleRegistry = request.app.state.modules
+    try:
+        modules.update(data, module_id)
+    except KeyError:
+        raise HTTPException(404, "Module not found")
+    store.save(data)
+    return {"items": modules.catalog(data)}
+
+
+@app.put("/api/modules/{module_id}/policy")
+async def update_module_policy(module_id: str, payload: ModulePolicyRequest, request: Request) -> dict:
+    require_role(request, "admin")
+    store = store_from(request)
+    data = store.load()
+    modules: ModuleRegistry = request.app.state.modules
+    try:
+        modules.set_auto_update(data, module_id, payload.auto_update)
+    except KeyError:
+        raise HTTPException(404, "Module not found")
+    except ValueError as exc:
+        raise HTTPException(400, str(exc))
+    store.save(data)
+    return {"items": modules.catalog(data)}
+
+
+@app.delete("/api/modules/{module_id}", status_code=204)
+async def uninstall_module(module_id: str, request: Request) -> None:
+    require_role(request, "admin")
+    store = store_from(request)
+    data = store.load()
+    modules: ModuleRegistry = request.app.state.modules
+    try:
+        modules.uninstall(data, module_id)
+    except KeyError:
+        raise HTTPException(404, "Module not found")
+    except ValueError as exc:
+        raise HTTPException(400, str(exc))
+    store.save(data)
+    await request.app.state.runtime.refresh(force=True)
+
+
 @app.get("/api/dashboards/{identifier}")
 async def get_dashboard(identifier: str, request: Request) -> dict:
     return dashboard_or_404(store_from(request), identifier)
@@ -332,6 +430,7 @@ async def create_dashboard(payload: Dashboard, request: Request) -> dict:
     if any(item["id"] == payload.id or item["slug"] == payload.slug for item in data["dashboards"]):
         raise HTTPException(409, "Dashboard ID and URL must be unique")
     dashboard = persist_livestream_secrets(data, payload.model_dump())
+    request.app.state.modules.install_for_widget_types(data, {widget["type"] for widget in dashboard.get("widgets", [])})
     data["dashboards"].append(dashboard)
     store.save(data)
     return dashboard
@@ -349,6 +448,7 @@ async def update_dashboard(identifier: str, payload: Dashboard, request: Request
         raise HTTPException(409, "Dashboard ID and URL must be unique")
     previous_id = str(data["dashboards"][index].get("id") or "")
     data["dashboards"][index] = persist_livestream_secrets(data, payload.model_dump(), previous_id)
+    request.app.state.modules.install_for_widget_types(data, {widget["type"] for widget in data["dashboards"][index].get("widgets", [])})
     store.save(data)
     return data["dashboards"][index]
 
@@ -857,6 +957,7 @@ async def import_dashboards(request: Request) -> dict:
             number += 1
         if candidate["slug"] != original_slug:
             candidate["name"] = f"{candidate['name']} (imported)"
+        request.app.state.modules.install_for_widget_types(data, {widget["type"] for widget in candidate.get("widgets", [])})
         data["dashboards"].append(candidate)
         imported.append(candidate)
     store_from(request).save(data)

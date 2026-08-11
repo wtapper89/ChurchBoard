@@ -84,6 +84,7 @@ def default_data() -> dict[str, Any]:
         },
         "users": [],
         "invitations": [],
+        "modules": {"installed": {}},
         "secrets": {"livestream": {}},
         "producer": {
             "checklist_templates": [],
@@ -130,6 +131,9 @@ class ConfigStore:
             )
             baseline["users"] = list(raw.get("users") or [])
             baseline["invitations"] = list(raw.get("invitations") or [])
+            baseline["modules"] = {
+                "installed": dict((raw.get("modules") or {}).get("installed") or {}),
+            }
             baseline["secrets"] = {
                 "livestream": dict((raw.get("secrets") or {}).get("livestream") or {}),
             }

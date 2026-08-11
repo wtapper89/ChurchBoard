@@ -1,0 +1,143 @@
+from __future__ import annotations
+
+
+def widget(widget_type: str, name: str, category: str, width: int, height: int, **settings):
+    return {"type": widget_type, "name": name, "category": category, "default": {"w": width, "h": height, **settings}}
+
+
+BUILTIN_MODULES = [
+    {
+        "id": "churchboard-core", "name": "ChurchBoard Pages", "vendor": "ChurchBoard", "version": "2.0.0",
+        "description": "Dashboard pages, clocks, custom content, layouts, and the module host.", "category": "Core",
+        "core": True, "default_installed": True, "dependencies": [],
+        "provides": ["churchboard.pages/v2", "churchboard.module-host/v2"], "consumes": [],
+        "widgets": [widget("clock", "Clock", "Service & timing", 3, 2), widget("text", "Custom text", "Content", 4, 2, text="Custom text")],
+        "pages": [{"id": "boards", "name": "Boards", "path": "/desktop"}],
+        "setup": [{"title": "Ready to use", "text": "This is the core page host and cannot be removed."}],
+        "frontend": {"renderer": "legacy-adapter"},
+    },
+    {
+        "id": "planning-center", "name": "Planning Center Services", "vendor": "Planning Center", "version": "2.0.0",
+        "description": "Service plans, service times, people, photos, positions, media, notes, timing, and Services LIVE.", "category": "Planning & people",
+        "default_installed": True, "settings_key": "planning_center", "dependencies": [],
+        "provides": ["churchboard.service-plan/v1", "churchboard.people/v1", "churchboard.media/v1", "churchboard.timing/v1"],
+        "consumes": ["churchboard.microphones/v1?"],
+        "widgets": [
+            widget("service", "Service", "Service & timing", 5, 2), widget("timing", "Timers", "Service & timing", 4, 2),
+            widget("assignments", "Scheduled Positions & Mics", "Planning Center", 7, 6, team_ids=[], position_keys=[], position_labels={}, display_mode="photos", card_grouping="person", use_planning_center_icon=False, unassigned_media_title="Icon"),
+            widget("order", "Order of service", "Service & timing", 5, 3, display_mode="current", limit=6, show_leader=False, show_mic=False),
+            widget("people", "Team members", "Planning Center", 4, 4, team_ids=[], position_keys=[], position_labels={}),
+            widget("sermon_notes", "Sermon notes", "Planning Center", 5, 5, item_title="Message", field_name="Vocals", font_scale=100),
+            widget("controls", "Service controls", "Service & timing", 4, 2),
+        ],
+        "pages": [{"id": "producer-service", "name": "Producer service", "path": "/producer"}],
+        "setup": [
+            {"title": "Create a dedicated account", "text": "Create a Planning Center user for ChurchBoard and grant only the Services and People access it needs."},
+            {"title": "Create a personal access token", "text": "Copy the Application ID and Secret into this module's configuration."},
+            {"title": "Choose service types", "text": "Test the connection, then select the service types ChurchBoard should open automatically."},
+        ],
+        "configuration_path": "/admin#planning-center", "documentation": "/docs/PLANNING_CENTER.md", "frontend": {"renderer": "legacy-adapter"},
+    },
+    {
+        "id": "propresenter", "name": "ProPresenter", "vendor": "Renewed Vision", "version": "2.0.0",
+        "description": "Current/next slides, rendered previews, playlists, timers, notes, and remote slide controls.", "category": "Presentation",
+        "default_installed": True, "settings_key": "propresenter", "dependencies": [],
+        "provides": ["churchboard.presentation/v1", "churchboard.presentation-control/v1"], "consumes": ["churchboard.service-plan/v1?"],
+        "widgets": [
+            widget("slides", "ProPresenter slides", "ProPresenter", 6, 4, show_notes=True, slide_mode="image", slide_layout="full", show_current=True, show_next=True, show_parts=True, show_slide_count=False),
+            widget("playlist", "ProPresenter playlist", "ProPresenter", 6, 7, slide_mode="image", allow_remote_trigger=True, keyboard_control_default=False, density="comfortable", auto_scroll=True, active_border_color="#f5c400"),
+            widget("pp_controls", "ProPresenter controls", "ProPresenter", 5, 3, allow_remote_trigger=True),
+            widget("notes", "Slide notes", "ProPresenter", 4, 2), widget("propresenter_timers", "ProPresenter timers", "ProPresenter", 5, 3),
+        ],
+        "pages": [],
+        "setup": [
+            {"title": "Enable Network", "text": "In ProPresenter Settings, enable the Network API and note the computer address and port."},
+            {"title": "Use the Planning Center playlist", "text": "For service matching, build the ProPresenter playlist from its Planning Center integration."},
+        ],
+        "configuration_path": "/admin#propresenter", "documentation": "/docs/PROPRESENTER.md", "frontend": {"renderer": "legacy-adapter"},
+    },
+    {
+        "id": "services-live-bridge", "name": "ProPresenter → Services LIVE", "vendor": "ChurchBoard", "version": "2.0.0",
+        "description": "Cross-module matching that lets ProPresenter presentation changes drive Planning Center Services LIVE and timing.", "category": "Interactions",
+        "dependencies": ["planning-center", "propresenter"], "provides": ["churchboard.services-live-sync/v1"],
+        "consumes": ["churchboard.service-plan/v1", "churchboard.presentation/v1"], "widgets": [], "pages": [],
+        "setup": [{"title": "Dependencies are automatic", "text": "Installing this interaction also installs Planning Center and ProPresenter."}, {"title": "Enable Services LIVE control", "text": "Open the module configuration and choose the matching and control policy."}],
+        "configuration_path": "/admin#propresenter", "frontend": {},
+    },
+    {
+        "id": "shure-wireless", "name": "Shure Wireless", "vendor": "Shure", "version": "2.0.0",
+        "description": "QLX-D, ULX-D, and SLX-D receiver status, battery, RF, audio, mute, and position mapping.", "category": "Wireless audio",
+        "settings_key": "shure", "dependencies": [], "provides": ["churchboard.microphones/v1"], "consumes": ["churchboard.people/v1?"], "widgets": [], "pages": [],
+        "setup": [{"title": "Use the production LAN", "text": "Connect each receiver and the ChurchBoard computer to the same trusted network."}, {"title": "Add receiver channels", "text": "Enter the receiver IP, channel, friendly mic name, and optional Planning Center position."}],
+        "configuration_path": "/admin#wireless-microphones", "frontend": {},
+    },
+    {
+        "id": "sennheiser-wireless", "name": "Sennheiser Wireless", "vendor": "Sennheiser", "version": "2.0.0",
+        "description": "EW-DX receiver telemetry through Sennheiser SSC, sharing the microphone data contract with other wireless modules.", "category": "Wireless audio",
+        "settings_key": "sennheiser", "dependencies": [], "provides": ["churchboard.microphones/v1"], "consumes": ["churchboard.people/v1?"], "widgets": [], "pages": [],
+        "setup": [{"title": "Enable SSC", "text": "Allow legacy SSC control on the receiver and keep UDP port 45 reachable on the production LAN."}, {"title": "Add receiver channels", "text": "Enter each receiver IP, channel, friendly name, and optional Planning Center position."}],
+        "configuration_path": "/admin#wireless-microphones", "frontend": {},
+    },
+    {
+        "id": "open-sound-meter", "name": "Open Sound Meter", "vendor": "Open Sound Meter", "version": "2.0.0",
+        "description": "Live SPL measurements plus per-service graphs and Planning Center item averages.", "category": "Audio measurement",
+        "settings_key": "open_sound_meter", "dependencies": [], "provides": ["churchboard.spl/v1"], "consumes": ["churchboard.timing/v1?"],
+        "widgets": [widget("spl", "Open Sound Meter", "Audio & streaming", 4, 3, green_max=75, orange_max=85, weighting="A", response="Fast")], "pages": [],
+        "setup": [{"title": "Enable the Remote API", "text": "Select the Wi-Fi icon in Open Sound Meter and enable Remote API Server."}, {"title": "Allow multicast", "text": "ChurchBoard listens on 239.255.42.42:49007; both devices must share a multicast-capable network."}],
+        "configuration_path": "/admin#open-sound-meter", "documentation": "/docs/OPEN_SOUND_METER.md", "frontend": {"renderer": "legacy-adapter"},
+    },
+    {
+        "id": "obs-studio", "name": "OBS Studio", "vendor": "OBS Project", "version": "2.0.0",
+        "description": "Streaming, recording, scene, performance, dropped-frame, audio, source, and preview monitoring.", "category": "Streaming",
+        "settings_key": "obs", "dependencies": [], "provides": ["churchboard.broadcast-health/v1"], "consumes": [],
+        "widgets": [widget("obs", "OBS live monitor", "Audio & streaming", 5, 4)], "pages": [],
+        "setup": [{"title": "Enable OBS WebSocket", "text": "Open Tools → WebSocket Server Settings in OBS and use the same port and password in ChurchBoard."}],
+        "configuration_path": "/admin#obs-studio", "frontend": {"renderer": "legacy-adapter"},
+    },
+    {
+        "id": "restream", "name": "Restream", "vendor": "Restream", "version": "2.0.0",
+        "description": "OAuth-based broadcast and destination status monitoring.", "category": "Streaming",
+        "settings_key": "restream", "dependencies": [], "provides": ["churchboard.livestream-status/v1"], "consumes": [],
+        "widgets": [widget("restream", "Restream livestream", "Audio & streaming", 5, 4)], "pages": [],
+        "setup": [{"title": "Create a Restream application", "text": "Add ChurchBoard's displayed callback URL to the application, then enter the client ID and secret."}],
+        "configuration_path": "/admin#restream", "documentation": "/docs/RESTREAM.md", "frontend": {"renderer": "legacy-adapter"},
+    },
+    {
+        "id": "livestream-monitor", "name": "Livestream Monitor", "vendor": "ChurchBoard", "version": "2.0.0",
+        "description": "Responsive Facebook, YouTube, BoxCast, Resi, and Restream live status cards, timers, and available viewer counts.", "category": "Streaming",
+        "dependencies": [], "provides": ["churchboard.livestream-pages/v1"], "consumes": ["churchboard.livestream-status/v1?"],
+        "widgets": [widget("livestreams", "Livestream status", "Audio & streaming", 5, 4, sources=[])], "pages": [],
+        "setup": [{"title": "Configure sources per page", "text": "Add the widget to a page, then enter each channel URL or platform API credential in its settings."}],
+        "frontend": {"renderer": "legacy-adapter"},
+    },
+    {
+        "id": "ndi-video", "name": "NDI Video", "vendor": "Vizrt NDI AB", "version": "2.0.0",
+        "description": "NDI source discovery and continuously refreshed video previews.", "category": "Video",
+        "settings_key": "ndi", "dependencies": [], "provides": ["churchboard.video-preview/v1"], "consumes": [],
+        "widgets": [widget("ndi", "NDI® video", "Audio & streaming", 6, 4, source_name="")], "pages": [],
+        "requirements": [{"id": "ndi-sdk", "name": "NDI SDK/runtime", "manual": True, "download_url": "https://ndi.video/for-developers/ndi-sdk/download/"}],
+        "setup": [
+            {"title": "Install the NDI SDK", "text": "Download the official SDK for this computer, run its installer, and keep the default location.", "url": "https://ndi.video/for-developers/ndi-sdk/download/"},
+            {"title": "Let ChurchBoard find it", "text": "Restart ChurchBoard and leave the runtime location blank. Use a custom path only when the SDK was installed elsewhere."},
+            {"title": "Enable an NDI sender", "text": "Turn on NDI output in ProPresenter or another sender on the same multicast-capable network."},
+        ],
+        "configuration_path": "/admin#ndi-video", "documentation": "/docs/NDI_AND_INTERCOM.md", "frontend": {"renderer": "legacy-adapter"},
+    },
+    {
+        "id": "producer", "name": "Producer", "vendor": "ChurchBoard", "version": "2.0.0",
+        "description": "Mobile service workspace, accounts, roles, checklists, resources, campuses, and service-time-aware workflows.", "category": "Producer",
+        "default_installed": True, "dependencies": ["planning-center"], "provides": ["churchboard.producer/v1", "churchboard.identity/v1"],
+        "consumes": ["churchboard.service-plan/v1", "churchboard.people/v1", "churchboard.media/v1"], "widgets": [],
+        "pages": [{"id": "producer", "name": "Producer", "path": "/producer"}],
+        "setup": [{"title": "Create the owner account", "text": "Open Producer and create the first owner. Add other users and match them to Planning Center people by name or email."}],
+        "configuration_path": "/producer", "documentation": "/docs/PRODUCER.md", "frontend": {},
+    },
+    {
+        "id": "producer-intercom", "name": "Producer Intercom", "vendor": "ChurchBoard / LiveKit", "version": "2.0.0",
+        "description": "ChurchBoard-hosted WebRTC party lines with listening, push-to-talk, latch-open microphones, and administrator mute-all.", "category": "Producer",
+        "settings_key": "intercom", "dependencies": ["producer"], "provides": ["churchboard.intercom/v1"], "consumes": ["churchboard.identity/v1"],
+        "widgets": [], "pages": [{"id": "producer-intercom", "name": "Intercom", "path": "/producer#intercom"}],
+        "setup": [{"title": "No separate server", "text": "ChurchBoard starts and secures the intercom engine automatically."}, {"title": "Use HTTPS on phones", "text": "Mobile microphone capture requires ChurchBoard HTTPS and a trusted certificate."}, {"title": "Use headphones", "text": "AirPods or another headset prevent feedback on an open party line."}],
+        "configuration_path": "/admin#producer-intercom", "documentation": "/docs/NDI_AND_INTERCOM.md", "frontend": {},
+    },
+]

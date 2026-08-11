@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 import os
-import shlex
 import socket
 import subprocess
 import tempfile
@@ -57,6 +56,12 @@ def _update_settings(data_file: Path, certificate: Path, private_key: Path) -> N
     os.replace(temporary, data_file)
 
 
+def _trust_macos_certificate(certificate: Path) -> None:
+    # User trust is enough for Safari/Chrome and does not require the
+    # system-wide authorization dialog that background applications cannot show.
+    _run(["/usr/bin/security", "add-trusted-cert", "-r", "trustRoot", str(certificate)])
+
+
 def install_macos_https(data_file: Path | None = None) -> dict:
     if os.uname().sysname != "Darwin":
         raise RuntimeError("The guided HTTPS installer is currently available on macOS only")
@@ -97,12 +102,7 @@ def install_macos_https(data_file: Path | None = None) -> dict:
     os.chmod(ca_key, 0o600)
     os.chmod(server_key, 0o600)
     server_csr.unlink(missing_ok=True)
-    trust_command = " ".join(shlex.quote(part) for part in [
-        str(security), "add-trusted-cert", "-d", "-r", "trustRoot",
-        "-k", "/Library/Keychains/System.keychain", str(ca_cert),
-    ])
-    escaped = trust_command.replace("\\", "\\\\").replace('"', '\\"')
-    _run(["/usr/bin/osascript", "-e", f'do shell script "{escaped}" with administrator privileges'])
+    _trust_macos_certificate(ca_cert)
     _update_settings(data_file or DATA_DIR / "churchboard.json", server_cert, server_key)
     return {"certificate": str(server_cert), "private_key": str(server_key), "ca_certificate": str(ca_cert),
             "names": names, "addresses": addresses}

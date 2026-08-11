@@ -4,11 +4,21 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
-from app.certificates import _update_settings
+from app.certificates import _trust_macos_certificate, _update_settings
 
 
 class CertificateTests(unittest.TestCase):
+    def test_certificate_trust_uses_current_user_not_system_keychain(self):
+        certificate = Path("/tmp/churchboard-local-ca.crt")
+        with patch("app.certificates._run") as run:
+            _trust_macos_certificate(certificate)
+        command = run.call_args.args[0]
+        self.assertEqual(command[:4], ["/usr/bin/security", "add-trusted-cert", "-r", "trustRoot"])
+        self.assertNotIn("-d", command)
+        self.assertNotIn("/Library/Keychains/System.keychain", command)
+
     def test_https_settings_are_merged_without_losing_existing_settings(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

@@ -13,8 +13,8 @@ OPTIONAL HTTPS
 ==============
 
 After copying ChurchBoard to Applications, double-click
-"Enable HTTPS.command" in this disk image. Enter your Mac password
-when prompted. It creates a unique certificate on this Mac, trusts it, configures
+"Enable HTTPS.command" in this disk image. It creates a unique certificate on
+this Mac, trusts it for your Mac account, configures
 ChurchBoard, and restarts the app. The private key never leaves this computer.
 
 The Control-click step is required for this testing build because it has not

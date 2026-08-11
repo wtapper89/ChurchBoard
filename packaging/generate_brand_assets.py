@@ -41,7 +41,7 @@ def font(size: int, bold: bool = False) -> ImageFont.FreeTypeFont | ImageFont.Im
 
 
 def create_dmg_background(icon: Image.Image, logo: Image.Image) -> Image.Image:
-    base = ImageOps.fit(icon.convert("RGB"), (900, 640), method=Image.Resampling.LANCZOS, centering=(0.5, 0.54))
+    base = ImageOps.fit(icon.convert("RGB"), (900, 760), method=Image.Resampling.LANCZOS, centering=(0.5, 0.54))
     base = ImageEnhance.Brightness(base).enhance(0.72).convert("RGBA")
     base.alpha_composite(Image.new("RGBA", base.size, (255, 246, 230, 55)))
     draw = ImageDraw.Draw(base)
@@ -57,10 +57,13 @@ def create_dmg_background(icon: Image.Image, logo: Image.Image) -> Image.Image:
     draw.line((388, 348, 507, 348), fill=(111, 59, 25, 255), width=18)
     draw.polygon(((507, 315), (550, 348), (507, 381)), fill=(111, 59, 25, 255))
     draw.text((398, 392), "DRAG TO INSTALL", font=font(17, bold=True), fill=(72, 38, 20, 255))
-    draw.rounded_rectangle((52, 504, 848, 616), radius=20, fill=(55, 31, 18, 205), outline=(255, 247, 233, 70), width=2)
-    draw.text((80, 526), "1. Drag ChurchBoard to Applications", font=font(19, bold=True), fill=(255, 250, 242, 255))
-    draw.text((80, 559), "2. Open Applications, then open ChurchBoard", font=font(19, bold=True), fill=(255, 250, 242, 255))
-    draw.text((80, 592), "The old-school board icon stays in your menu bar while it runs.", font=font(15), fill=(242, 221, 198, 255))
+    draw.rounded_rectangle((52, 498, 848, 736), radius=20, fill=(55, 31, 18, 218), outline=(255, 247, 233, 70), width=2)
+    draw.text((76, 516), "OPTIONAL: ENABLE HTTPS", font=font(16, bold=True), fill=(232, 190, 132, 255))
+    draw.text((76, 551), "After installing the app, double-click", font=font(18), fill=(255, 250, 242, 255))
+    draw.text((76, 579), "Enable HTTPS on the right.", font=font(18, bold=True), fill=(255, 250, 242, 255))
+    draw.text((76, 630), "Creates, trusts, and configures your", font=font(15), fill=(242, 221, 198, 255))
+    draw.text((76, 653), "certificate automatically.", font=font(15), fill=(242, 221, 198, 255))
+    draw.text((76, 700), "The ChurchBoard icon stays in your menu bar while it runs.", font=font(14), fill=(242, 221, 198, 255))
     return base.convert("RGB")
 
 

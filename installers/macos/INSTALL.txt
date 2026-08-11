@@ -9,5 +9,13 @@ INSTALL CHURCHBOARD
 ChurchBoard will install its login service, start in the background, and open
 Setup in your default browser. It will start automatically at future logins.
 
+OPTIONAL HTTPS
+==============
+
+After copying ChurchBoard to Applications, double-click
+"Enable HTTPS.command" in this disk image. Enter your Mac password
+when prompted. It creates a unique certificate on this Mac, trusts it, configures
+ChurchBoard, and restarts the app. The private key never leaves this computer.
+
 The Control-click step is required for this testing build because it has not
 yet been signed and notarized with an Apple Developer ID.

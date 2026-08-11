@@ -74,11 +74,16 @@ fi
 /usr/bin/xattr -cr "$STAGED_APP"
 /usr/bin/find "$STAGED_APP" -name '._*' -delete
 
+HTTPS_INSTALLER="$PACKAGE_STAGE/Enable HTTPS.command"
+/usr/bin/ditto "$PROJECT_DIR/installers/macos/Enable HTTPS.command" "$HTTPS_INSTALLER"
+/bin/chmod +x "$HTTPS_INSTALLER"
+
 .build-venv/bin/dmgbuild \
   -s "$PROJECT_DIR/packaging/dmg-settings.py" \
   -D "app=$STAGED_APP" \
   -D "background=$PROJECT_DIR/packaging/assets/dmg-background.png" \
   -D "icon=$PROJECT_DIR/packaging/assets/ChurchBoard.icns" \
+  -D "https_installer=$HTTPS_INSTALLER" \
   "ChurchBoard ${VERSION}" "$PACKAGE_STAGE/ChurchBoard.dmg"
 COPYFILE_DISABLE=1 /bin/cp "$PACKAGE_STAGE/ChurchBoard.dmg" "$DMG_PATH"
 

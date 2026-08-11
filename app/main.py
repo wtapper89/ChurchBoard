@@ -493,6 +493,24 @@ async def get_settings(request: Request) -> dict:
     return settings
 
 
+@app.post("/api/settings/https/setup")
+async def setup_local_https(request: Request) -> dict:
+    """Generate and trust a local certificate without exposing key paths in the UI."""
+    require_role(request, "admin")
+    from app.certificates import install_macos_https
+
+    store = store_from(request)
+    try:
+        result = await asyncio.to_thread(install_macos_https, store.path)
+    except RuntimeError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    return {
+        "message": "HTTPS is ready. Quit and reopen ChurchBoard to apply it.",
+        "settings": store.public_settings(),
+        "certificate": result["certificate"],
+    }
+
+
 @app.put("/api/settings")
 async def update_settings(payload: SettingsUpdate, request: Request) -> dict:
     require_role(request, "admin")

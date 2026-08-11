@@ -244,7 +244,20 @@ if __name__ == "__main__":
         action="store_true",
         help=argparse.SUPPRESS,
     )
+    parser.add_argument(
+        "--install-https",
+        action="store_true",
+        help="generate, trust, and configure a local HTTPS certificate on macOS",
+    )
     arguments = parser.parse_args()
+    if arguments.install_https:
+        from app.certificates import install_macos_https
+
+        result = install_macos_https()
+        print("ChurchBoard HTTPS is ready.")
+        print(f"Certificate: {result['certificate']}")
+        print("Restart ChurchBoard to begin using HTTPS.")
+        raise SystemExit(0)
     app.state.macos_launchservices = bool(arguments.launchservices)
     if compatible_desktop_is_running():
         if not arguments.background:

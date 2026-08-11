@@ -4,6 +4,8 @@ import os
 import json
 import tempfile
 import unittest
+from pathlib import Path
+from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 
@@ -346,6 +348,26 @@ class ApiTests(unittest.TestCase):
         saved = self.client.put("/api/settings", json=settings)
         self.assertEqual(saved.status_code, 200)
         self.assertEqual(saved.json()["server"]["port"], 8080)
+
+    def test_guided_https_setup_configures_paths_without_manual_entry(self):
+        def fake_installer(data_file):
+            from app.certificates import _update_settings
+
+            root = Path(data_file).parent / "https"
+            root.mkdir(parents=True, exist_ok=True)
+            certificate, private_key = root / "churchboard.crt", root / "churchboard.key"
+            certificate.write_text("certificate")
+            private_key.write_text("private key")
+            _update_settings(Path(data_file), certificate, private_key)
+            return {"certificate": str(certificate), "private_key": str(private_key), "ca_certificate": str(root / "ca.crt")}
+
+        with patch("app.certificates.install_macos_https", side_effect=fake_installer):
+            response = self.client.post("/api/settings/https/setup")
+        self.assertEqual(response.status_code, 200)
+        server = response.json()["settings"]["server"]
+        self.assertTrue(server["https_enabled"])
+        self.assertTrue(server["ssl_certfile"].endswith("churchboard.crt"))
+        self.assertTrue(server["ssl_keyfile"].endswith("churchboard.key"))
 
     def test_producer_media_tag_rules_are_saved(self):
         self.client.post("/api/auth/bootstrap", json={"name": "Owner", "email": "owner@example.test", "password": "beta"})

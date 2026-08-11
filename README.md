@@ -81,7 +81,7 @@ Not sure which Mac you have? Choose **Apple menu → About This Mac**. If it say
 
 Every desktop installer configures ChurchBoard to start automatically. Opening ChurchBoard from the Start menu, Applications folder, or desktop menu opens its desktop control page in the default browser.
 
-On macOS, the supplied old-school wooden board icon stays in the menu bar. On Windows, it stays in the system tray. Its menu opens the desktop control page, Setup, or any configured board and can quit ChurchBoard. The desktop control page also checks GitHub for updates and opens the correct installer for the computer.
+On macOS, the ChurchBoard icon stays in the menu bar. On Windows, it stays in the system tray. Its menu opens the desktop control page, Setup, or any configured board and can quit ChurchBoard. The desktop control page also checks GitHub for updates and opens the correct installer for the computer.
 
 ### Raspberry Pi
 

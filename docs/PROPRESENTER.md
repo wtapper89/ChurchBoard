@@ -50,7 +50,7 @@ ChurchBoard reads ProPresenter over the local network.
 2. Select **Network**.
 3. Enable **Network**.
 4. Record the ProPresenter computer's local **IP address** and **Port** shown in this panel.
-5. In ChurchBoard Setup, enable **ProPresenter**, enter that IP address and port, and save settings.
+5. In **Setup & modules**, open **ProPresenter**, enter that IP address and port, and save the module settings.
 6. Open a ChurchBoard display and confirm that slide/item data updates when slides change.
 
 Renewed Vision documents the Network controls in [ProPresenter Preferences](https://learn.renewedvision.com/propresenter/preferences) and its API in [Other Features](https://learn.renewedvision.com/propresenter/other-features).
@@ -116,7 +116,7 @@ Before enabling it:
 4. Make sure the ChurchBoard PAT user has **Editor** access to control LIVE. Taking control from another controller can require **Administrator** access.
 5. Resolve all ProPresenter playlist items to the correct Planning Center items.
 
-Then in ChurchBoard Setup:
+Then open the **ProPresenter → Services LIVE** module in **Setup & modules**:
 
 1. Enable **Let ProPresenter drive Planning Center Services LIVE**.
 2. Enable **Automatically take control when needed** only if ChurchBoard should claim control.

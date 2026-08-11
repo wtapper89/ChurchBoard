@@ -101,7 +101,7 @@ See [Installation](docs/INSTALLATION.md) for detailed steps, updates, automatic-
 
 ## First-time setup
 
-Open `http://127.0.0.1:8040/admin`, turn off demonstration data, and configure Planning Center first. ChurchBoard stores settings only on the computer running it.
+Open `http://127.0.0.1:8040/modules`, turn off demonstration data in the core settings, then open the Planning Center module to configure it. ChurchBoard stores settings only on the computer running it.
 
 ![ChurchBoard integrations setup](docs/screenshots/setup.jpg)
 

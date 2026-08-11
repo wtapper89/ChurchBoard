@@ -234,7 +234,7 @@ async def prevent_stale_dashboard_assets(request: Request, call_next):
     auth = getattr(request.app.state, "auth", None)
     if auth is not None:
         request.state.user = auth.current_user(request)
-        protected_page = request.url.path in {"/admin", "/producer"} or request.url.path.startswith("/editor/")
+        protected_page = request.url.path in {"/admin", "/modules", "/producer"} or request.url.path.startswith("/editor/")
         if request.url.path == "/producer" and not store_from(request).load().get("users"):
             return RedirectResponse("/login?next=/producer", status_code=303)
         if protected_page and auth.enabled() and not request.state.user:
@@ -244,7 +244,7 @@ async def prevent_stale_dashboard_assets(request: Request, call_next):
     response.headers["Referrer-Policy"] = "same-origin"
     if request.url.scheme == "https" or request.headers.get("x-forwarded-proto") == "https":
         response.headers["Strict-Transport-Security"] = "max-age=31536000"
-    if request.url.path.startswith(("/static/", "/api/producer/", "/api/users", "/api/campuses")) or request.url.path in {"/admin", "/desktop", "/producer"} or request.url.path.startswith(("/display/", "/editor/")):
+    if request.url.path.startswith(("/static/", "/api/producer/", "/api/users", "/api/campuses")) or request.url.path in {"/admin", "/modules", "/desktop", "/producer"} or request.url.path.startswith(("/display/", "/editor/")):
         response.headers["Cache-Control"] = "no-store"
     return response
 
@@ -310,8 +310,9 @@ async def producer_page() -> FileResponse:
 
 
 @app.get("/admin")
-async def admin_page() -> FileResponse:
-    return FileResponse(ROOT_DIR / "app" / "static" / "admin.html")
+async def admin_page() -> RedirectResponse:
+    """Keep old bookmarks working while Setup lives in Module Management."""
+    return RedirectResponse("/modules", status_code=307)
 
 
 @app.get("/modules")
@@ -477,8 +478,16 @@ async def get_settings(request: Request) -> dict:
     require_role(request, "admin")
     settings = store_from(request).public_settings()
     intercom = request.app.state.runtime.intercom.status()
+    settings["intercom"]["server_ports"] = {
+        "signal": intercom.get("signal_port"),
+        "tcp": intercom.get("tcp_port"),
+        "udp": intercom.get("udp_port"),
+    }
     if intercom.get("ready"):
-        settings["intercom"]["server_status"] = "Hosted intercom server is ready"
+        settings["intercom"]["server_status"] = (
+            f"Hosted intercom server is ready · signaling {intercom.get('signal_port')} · "
+            f"TCP {intercom.get('tcp_port')} · UDP {intercom.get('udp_port')}"
+        )
     elif settings["intercom"].get("enabled"):
         settings["intercom"]["server_status"] = intercom.get("error") or "Hosted intercom server is starting…"
     return settings

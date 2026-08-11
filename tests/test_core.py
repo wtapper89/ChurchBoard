@@ -131,15 +131,24 @@ class StoreTests(unittest.TestCase):
         self.assertEqual(payload["video"]["canPublishSources"], ["microphone"])
         self.assertEqual(json.loads(payload["metadata"])["role"], "admin")
 
-    def test_hosted_intercom_config_uses_fixed_local_ports_and_private_credentials(self):
+    def test_hosted_intercom_config_uses_selected_local_ports_and_private_credentials(self):
         with tempfile.TemporaryDirectory() as directory:
             service = HostedIntercomServer(Path(directory) / "churchboard.json")
+            service.signal_port, service.tcp_port, service.udp_port = 7980, 7981, 7982
             config = service._write_config("churchboard-key", "12345678901234567890123456789012")
             contents = config.read_text(encoding="utf-8")
-            self.assertIn("port: 7880", contents)
-            self.assertIn("tcp_port: 7881", contents)
-            self.assertIn("udp_port: 7882", contents)
+            self.assertIn("port: 7980", contents)
+            self.assertIn("tcp_port: 7981", contents)
+            self.assertIn("udp_port: 7982", contents)
             self.assertIn('"churchboard-key": "12345678901234567890123456789012"', contents)
+
+    def test_hosted_intercom_moves_to_next_port_set_when_udp_default_is_busy(self):
+        def available(port, socket_type):
+            return port != HostedIntercomServer.UDP_PORT
+
+        with patch.object(HostedIntercomServer, "_port_available", side_effect=available):
+            ports = HostedIntercomServer._available_port_set()
+        self.assertEqual(ports, (7890, 7891, 7892))
 
     def test_restream_client_normalizes_live_event_and_destinations(self):
         client = RestreamClient({"enabled": True, "access_token": "token"})

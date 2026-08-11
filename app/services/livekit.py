@@ -66,6 +66,9 @@ class HostedIntercomServer:
         self._settings_key: tuple[Any, ...] | None = None
         self._log_handle = None
         self._last_start = 0.0
+        self.signal_port = self.SIGNAL_PORT
+        self.tcp_port = self.TCP_PORT
+        self.udp_port = self.UDP_PORT
 
     @staticmethod
     def _binary_candidates() -> list[Path]:
@@ -110,10 +113,10 @@ class HostedIntercomServer:
         # changing the structure of this private configuration file.
         config.write_text(
             "\n".join([
-                f"port: {self.SIGNAL_PORT}",
+                f"port: {self.signal_port}",
                 "rtc:",
-                f"  tcp_port: {self.TCP_PORT}",
-                f"  udp_port: {self.UDP_PORT}",
+                f"  tcp_port: {self.tcp_port}",
+                f"  udp_port: {self.udp_port}",
                 "  use_external_ip: false",
                 "keys:",
                 f"  {json.dumps(api_key)}: {json.dumps(api_secret)}",
@@ -139,6 +142,39 @@ class HostedIntercomServer:
                 return True
         except OSError:
             return False
+
+    @staticmethod
+    def _port_available(port: int, socket_type: int) -> bool:
+        """Check a prospective LiveKit listener without sharing the address.
+
+        UDP listeners are especially easy to accidentally share on Unix when
+        SO_REUSEADDR is enabled. ChurchBoard deliberately performs an exclusive
+        bind here so a Companion, OBS, or older ChurchBoard media service on the
+        same computer cannot make LiveKit fail a moment after it is launched.
+        """
+        try:
+            with socket.socket(socket.AF_INET, socket_type) as candidate:
+                if sys.platform == "win32" and hasattr(socket, "SO_EXCLUSIVEADDRUSE"):
+                    candidate.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
+                candidate.bind(("0.0.0.0", port))
+            return True
+        except OSError:
+            return False
+
+    @classmethod
+    def _available_port_set(cls) -> tuple[int, int, int]:
+        """Prefer LiveKit's familiar defaults, then choose a free port trio."""
+        for offset in range(0, 1000, 10):
+            signal_port = cls.SIGNAL_PORT + offset
+            tcp_port = cls.TCP_PORT + offset
+            udp_port = cls.UDP_PORT + offset
+            if (
+                cls._port_available(signal_port, socket.SOCK_STREAM)
+                and cls._port_available(tcp_port, socket.SOCK_STREAM)
+                and cls._port_available(udp_port, socket.SOCK_DGRAM)
+            ):
+                return signal_port, tcp_port, udp_port
+        raise OSError("ChurchBoard could not find three available local ports for the hosted intercom")
 
     def _last_log_line(self) -> str:
         try:
@@ -172,7 +208,12 @@ class HostedIntercomServer:
             self.binary_path = ""
             return
         self.directory.mkdir(parents=True, exist_ok=True)
-        config = self._write_config(api_key, api_secret)
+        try:
+            self.signal_port, self.tcp_port, self.udp_port = self._available_port_set()
+            config = self._write_config(api_key, api_secret)
+        except OSError as exc:
+            self.error = str(exc)
+            return
         log_path = self.directory / "livekit.log"
         try:
             self._log_handle = log_path.open("a", encoding="utf-8")
@@ -215,7 +256,7 @@ class HostedIntercomServer:
 
     def status(self) -> dict[str, Any]:
         running = self.process is not None and self.process.poll() is None
-        ready = running and self._port_ready(self.SIGNAL_PORT)
+        ready = running and self._port_ready(self.signal_port)
         error = self.error
         if self.process is not None and self.process.poll() is not None and not error:
             detail = self._last_log_line()
@@ -225,7 +266,7 @@ class HostedIntercomServer:
             "ready": ready,
             "error": error,
             "binary_path": self.binary_path,
-            "signal_port": self.SIGNAL_PORT,
-            "tcp_port": self.TCP_PORT,
-            "udp_port": self.UDP_PORT,
+            "signal_port": self.signal_port,
+            "tcp_port": self.tcp_port,
+            "udp_port": self.udp_port,
         }

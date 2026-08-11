@@ -1,4 +1,5 @@
 let context=null,catalog=[],campuses=[],users=[],planningPeople=[],mediaTagGroups=[],intercomConfig=null,intercomRoom=null,intercomPttActive=false,intercomStarting=false,producerPortal=false;
+document.querySelector('a[href="/admin"][data-admin-link]')?.remove();const producerSetupLink=document.querySelector('a[href="/modules"][data-admin-link]');if(producerSetupLink)producerSetupLink.textContent="Setup & modules";
 const esc=value=>escapeHtml(value??"");
 async function producerApi(path,options={}){try{return await api(path,{cache:"no-store",...options})}catch(error){if(String(error.message).includes("Sign in")){location.href=`/login?next=${encodeURIComponent(location.pathname)}`}throw error}}
 const selectedPositions=root=>[...root.querySelectorAll("input:checked")].map(input=>input.value);

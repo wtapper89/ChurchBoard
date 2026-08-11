@@ -2,7 +2,7 @@
 
 For a guided walkthrough, watch the **[ChurchBoard setup and demo video](https://youtu.be/pE_uWD24G2c)**.
 
-Open `http://127.0.0.1:8040/admin`. Keep **Use demonstration data** enabled while learning the editor, then disable it before connecting production systems.
+Open `http://127.0.0.1:8040/modules`. Keep **Use demonstration data** enabled in the core settings while learning the editor, then disable it before connecting production systems. Each integration is configured by opening its module card.
 
 ![ChurchBoard setup page](screenshots/setup.jpg)
 
@@ -14,7 +14,7 @@ For a complete walkthrough—including a dedicated integration user, least-privi
 
 1. In Planning Center, open the developer Personal Access Token page for the account ChurchBoard should use.
 2. Create a personal token and copy its **Application ID** and **Secret**.
-3. In ChurchBoard Setup, enable **Planning Center** and paste both values.
+3. In **Setup & modules**, open **Planning Center Services**, enable it, and paste both values.
 4. Choose **Save & test connection**.
 5. Check each service type ChurchBoard should consider.
 6. Set the automatic plan window:
@@ -89,7 +89,7 @@ For the complete linked-playlist workflow, recommended Planning Center integrati
 
 1. In ProPresenter, enable the Network API.
 2. Note the ProPresenter computer's local IP address and API port.
-3. In ChurchBoard Setup, enable ProPresenter and enter both values.
+3. In **Setup & modules**, open **ProPresenter**, enable it, and enter both values.
 4. Save settings.
 
 In a ProPresenter widget, choose:
@@ -150,7 +150,7 @@ ChurchBoard can receive calibrated level data directly from [Open Sound Meter](h
 1. In Open Sound Meter, configure the audio interface, measurement microphone, and calibration.
 2. Choose the Wi-Fi icon and enable **Remote API Server**.
 3. Keep the Open Sound Meter and ChurchBoard computers on the same multicast-enabled network segment.
-4. In ChurchBoard Setup, enable **Open Sound Meter monitoring**.
+4. In **Setup & modules**, open **Open Sound Meter** and enable monitoring.
 5. Select the measurement source, report weighting, and Fast or Slow response.
 6. Optionally enable downloadable SPL graphs and Planning Center item averages.
 7. Choose **Test OSM connection**, then add an **Open Sound Meter** widget to the desired board.
@@ -162,9 +162,9 @@ ChurchBoard displays Open Sound Meter's selected level after applying the same S
 Restream monitoring shows whether a broadcast is live or upcoming, its elapsed time and available viewer count, and the state of each configured destination.
 
 1. Create a Restream API application and copy its **Client ID** and **Client Secret**.
-2. Add the Redirect URI displayed in ChurchBoard Setup. It follows the current HTTP/HTTPS origin and configured port.
+2. Add the Redirect URI displayed in the Restream module configuration. It follows the current HTTP/HTTPS origin and configured port.
 3. Grant only the read scopes needed for channels, streams/events, and viewer analytics.
-4. In ChurchBoard Setup, enable **Restream monitoring** and enter both credentials.
+4. In **Setup & modules**, open **Restream**, enable monitoring, and enter both credentials.
 5. Choose **Save & connect Restream**, authorize the account, and then test the connection.
 6. Add a **Restream livestream** widget to any dashboard that needs broadcast visibility.
 
@@ -188,7 +188,7 @@ ChurchBoard can monitor OBS Studio through its built-in WebSocket server without
 
 1. In OBS, open **Tools → WebSocket Server Settings**.
 2. Enable the WebSocket server, set a strong password, and note the port (normally `4455`).
-3. In ChurchBoard Setup, enable **OBS Studio monitoring** and enter the OBS computer's LAN address, port, and password.
+3. In **Setup & modules**, open **OBS Studio**, enable monitoring, and enter the OBS computer's LAN address, port, and password.
 4. Set the dropped-frame warning threshold. Optionally provide a browser-readable preview-image URL if another tool publishes one; OBS WebSocket itself does not provide a live preview image.
 5. Save, then add an **OBS Studio** widget to an operator dashboard.
 

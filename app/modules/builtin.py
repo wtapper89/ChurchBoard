@@ -36,7 +36,7 @@ BUILTIN_MODULES = [
             {"title": "Create a personal access token", "text": "Copy the Application ID and Secret into this module's configuration."},
             {"title": "Choose service types", "text": "Test the connection, then select the service types ChurchBoard should open automatically."},
         ],
-        "configuration_path": "/admin#planning-center", "documentation": "/docs/PLANNING_CENTER.md", "frontend": {"renderer": "legacy-adapter"},
+        "configuration_path": "/modules#planning-center", "documentation": "/docs/PLANNING_CENTER.md", "frontend": {"renderer": "legacy-adapter"},
     },
     {
         "id": "propresenter", "name": "ProPresenter", "vendor": "Renewed Vision", "version": "2.0.0",
@@ -54,7 +54,7 @@ BUILTIN_MODULES = [
             {"title": "Enable Network", "text": "In ProPresenter Settings, enable the Network API and note the computer address and port."},
             {"title": "Use the Planning Center playlist", "text": "For service matching, build the ProPresenter playlist from its Planning Center integration."},
         ],
-        "configuration_path": "/admin#propresenter", "documentation": "/docs/PROPRESENTER.md", "frontend": {"renderer": "legacy-adapter"},
+        "configuration_path": "/modules#propresenter", "documentation": "/docs/PROPRESENTER.md", "frontend": {"renderer": "legacy-adapter"},
     },
     {
         "id": "services-live-bridge", "name": "ProPresenter → Services LIVE", "vendor": "ChurchBoard", "version": "2.0.0",
@@ -62,21 +62,21 @@ BUILTIN_MODULES = [
         "dependencies": ["planning-center", "propresenter"], "provides": ["churchboard.services-live-sync/v1"],
         "consumes": ["churchboard.service-plan/v1", "churchboard.presentation/v1"], "widgets": [], "pages": [],
         "setup": [{"title": "Dependencies are automatic", "text": "Installing this interaction also installs Planning Center and ProPresenter."}, {"title": "Enable Services LIVE control", "text": "Open the module configuration and choose the matching and control policy."}],
-        "configuration_path": "/admin#propresenter", "frontend": {},
+        "configuration_path": "/modules#services-live-bridge", "frontend": {},
     },
     {
         "id": "shure-wireless", "name": "Shure Wireless", "vendor": "Shure", "version": "2.0.0",
         "description": "QLX-D, ULX-D, and SLX-D receiver status, battery, RF, audio, mute, and position mapping.", "category": "Wireless audio",
         "settings_key": "shure", "dependencies": [], "provides": ["churchboard.microphones/v1"], "consumes": ["churchboard.people/v1?"], "widgets": [], "pages": [],
         "setup": [{"title": "Use the production LAN", "text": "Connect each receiver and the ChurchBoard computer to the same trusted network."}, {"title": "Add receiver channels", "text": "Enter the receiver IP, channel, friendly mic name, and optional Planning Center position."}],
-        "configuration_path": "/admin#wireless-microphones", "frontend": {},
+        "configuration_path": "/modules#shure-wireless", "frontend": {},
     },
     {
         "id": "sennheiser-wireless", "name": "Sennheiser Wireless", "vendor": "Sennheiser", "version": "2.0.0",
         "description": "EW-DX receiver telemetry through Sennheiser SSC, sharing the microphone data contract with other wireless modules.", "category": "Wireless audio",
         "settings_key": "sennheiser", "dependencies": [], "provides": ["churchboard.microphones/v1"], "consumes": ["churchboard.people/v1?"], "widgets": [], "pages": [],
         "setup": [{"title": "Enable SSC", "text": "Allow legacy SSC control on the receiver and keep UDP port 45 reachable on the production LAN."}, {"title": "Add receiver channels", "text": "Enter each receiver IP, channel, friendly name, and optional Planning Center position."}],
-        "configuration_path": "/admin#wireless-microphones", "frontend": {},
+        "configuration_path": "/modules#sennheiser-wireless", "frontend": {},
     },
     {
         "id": "open-sound-meter", "name": "Open Sound Meter", "vendor": "Open Sound Meter", "version": "2.0.0",
@@ -84,7 +84,7 @@ BUILTIN_MODULES = [
         "settings_key": "open_sound_meter", "dependencies": [], "provides": ["churchboard.spl/v1"], "consumes": ["churchboard.timing/v1?"],
         "widgets": [widget("spl", "Open Sound Meter", "Audio & streaming", 4, 3, green_max=75, orange_max=85, weighting="A", response="Fast")], "pages": [],
         "setup": [{"title": "Enable the Remote API", "text": "Select the Wi-Fi icon in Open Sound Meter and enable Remote API Server."}, {"title": "Allow multicast", "text": "ChurchBoard listens on 239.255.42.42:49007; both devices must share a multicast-capable network."}],
-        "configuration_path": "/admin#open-sound-meter", "documentation": "/docs/OPEN_SOUND_METER.md", "frontend": {"renderer": "legacy-adapter"},
+        "configuration_path": "/modules#open-sound-meter", "documentation": "/docs/OPEN_SOUND_METER.md", "frontend": {"renderer": "legacy-adapter"},
     },
     {
         "id": "obs-studio", "name": "OBS Studio", "vendor": "OBS Project", "version": "2.0.0",
@@ -92,7 +92,7 @@ BUILTIN_MODULES = [
         "settings_key": "obs", "dependencies": [], "provides": ["churchboard.broadcast-health/v1"], "consumes": [],
         "widgets": [widget("obs", "OBS live monitor", "Audio & streaming", 5, 4)], "pages": [],
         "setup": [{"title": "Enable OBS WebSocket", "text": "Open Tools → WebSocket Server Settings in OBS and use the same port and password in ChurchBoard."}],
-        "configuration_path": "/admin#obs-studio", "frontend": {"renderer": "legacy-adapter"},
+        "configuration_path": "/modules#obs-studio", "frontend": {"renderer": "legacy-adapter"},
     },
     {
         "id": "restream", "name": "Restream", "vendor": "Restream", "version": "2.0.0",
@@ -100,7 +100,7 @@ BUILTIN_MODULES = [
         "settings_key": "restream", "dependencies": [], "provides": ["churchboard.livestream-status/v1"], "consumes": [],
         "widgets": [widget("restream", "Restream livestream", "Audio & streaming", 5, 4)], "pages": [],
         "setup": [{"title": "Create a Restream application", "text": "Add ChurchBoard's displayed callback URL to the application, then enter the client ID and secret."}],
-        "configuration_path": "/admin#restream", "documentation": "/docs/RESTREAM.md", "frontend": {"renderer": "legacy-adapter"},
+        "configuration_path": "/modules#restream", "documentation": "/docs/RESTREAM.md", "frontend": {"renderer": "legacy-adapter"},
     },
     {
         "id": "livestream-monitor", "name": "Livestream Monitor", "vendor": "ChurchBoard", "version": "2.0.0",
@@ -121,7 +121,7 @@ BUILTIN_MODULES = [
             {"title": "Let ChurchBoard find it", "text": "Restart ChurchBoard and leave the runtime location blank. Use a custom path only when the SDK was installed elsewhere."},
             {"title": "Enable an NDI sender", "text": "Turn on NDI output in ProPresenter or another sender on the same multicast-capable network."},
         ],
-        "configuration_path": "/admin#ndi-video", "documentation": "/docs/NDI_AND_INTERCOM.md", "frontend": {"renderer": "legacy-adapter"},
+        "configuration_path": "/modules#ndi-video", "documentation": "/docs/NDI_AND_INTERCOM.md", "frontend": {"renderer": "legacy-adapter"},
     },
     {
         "id": "producer", "name": "Producer", "vendor": "ChurchBoard", "version": "2.0.0",
@@ -138,6 +138,6 @@ BUILTIN_MODULES = [
         "settings_key": "intercom", "dependencies": ["producer"], "provides": ["churchboard.intercom/v1"], "consumes": ["churchboard.identity/v1"],
         "widgets": [], "pages": [{"id": "producer-intercom", "name": "Intercom", "path": "/producer#intercom"}],
         "setup": [{"title": "No separate server", "text": "ChurchBoard starts and secures the intercom engine automatically."}, {"title": "Use HTTPS on phones", "text": "Mobile microphone capture requires ChurchBoard HTTPS and a trusted certificate."}, {"title": "Use headphones", "text": "AirPods or another headset prevent feedback on an open party line."}],
-        "configuration_path": "/admin#producer-intercom", "documentation": "/docs/NDI_AND_INTERCOM.md", "frontend": {},
+        "configuration_path": "/modules#producer-intercom", "documentation": "/docs/NDI_AND_INTERCOM.md", "frontend": {},
     },
 ]

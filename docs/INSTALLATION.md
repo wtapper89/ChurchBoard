@@ -19,7 +19,7 @@ These links point to the official public ChurchBoard release. If you install fro
 After installation, Setup is available at:
 
 ```text
-http://127.0.0.1:8040/admin
+http://127.0.0.1:8040/modules
 ```
 
 Another computer on the same trusted network can use:
@@ -69,7 +69,7 @@ To uninstall, download and run [`Uninstall ChurchBoard.command`](../installers/m
    ```
 
 3. The system service starts immediately and at boot.
-4. Open `http://127.0.0.1:8040/admin`.
+4. Open `http://127.0.0.1:8040/modules`.
 
 The package runs ChurchBoard as a dedicated `churchboard` system user. Settings are stored in `/var/lib/churchboard`, and logs are available with:
 

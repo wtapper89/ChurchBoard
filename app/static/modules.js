@@ -46,7 +46,7 @@ function moduleCard(module){
   return `<article class="module-card ${module.installed?"installed":""} ${module.update_available?"update":""}"><div class="module-card-header"><span class="module-card-icon">${escapeHtml(iconFor(module))}</span><div><h3>${escapeHtml(module.name)}</h3><span class="module-card-vendor">${escapeHtml(module.vendor)} · ${escapeHtml(module.available_version)}</span></div><div class="module-badges">${state}</div></div><p>${escapeHtml(module.description)}</p><div class="module-dependency-note">${dependencies.length?`Adds: ${escapeHtml(dependencies.join(", "))}`:`${(module.widgets||[]).length} widget${(module.widgets||[]).length===1?"":"s"} · ${(module.pages||[]).length} page${(module.pages||[]).length===1?"":"s"}`}</div><div class="module-card-actions"><button class="button secondary" data-module-open="${escapeHtml(module.id)}">Details</button>${action}</div></article>`;
 }
 
-function openModule(moduleId){
+async function openModule(moduleId){
   selectedModule=moduleById(moduleId);if(!selectedModule)return;
   const module=selectedModule,dialog=document.querySelector("#module-details"),dependencies=(module.dependencies||[]).map(id=>moduleById(id)?.name||id);
   document.querySelector("#module-detail-vendor").textContent=`${module.vendor} · ${module.available_version}`;
@@ -60,13 +60,17 @@ function openModule(moduleId){
   const capabilities=[...(module.pages||[]).map(page=>`Page · ${page.name}`),...(module.widgets||[]).map(widget=>`Widget · ${widget.name}`)];
   document.querySelector("#module-detail-widgets").innerHTML=capabilities.map(value=>`<span>${escapeHtml(value)}</span>`).join("");
   document.querySelector("#module-detail-widgets-section").hidden=!capabilities.length;
-  const configure=module.configuration_path&&module.installed?`<a class="button secondary" href="${escapeHtml(module.configuration_path)}">Configure</a>`:"";
+  const configure=module.installed?"":"";
   const update=module.update_available?`<button class="button" data-module-update="${escapeHtml(module.id)}">Update to ${escapeHtml(module.available_version)}</button>`:"";
   const install=!module.installed?`<button class="button" data-module-install="${escapeHtml(module.id)}">Add module${dependencies.length?" and requirements":""}</button>`:"";
   const remove=module.installed&&!module.core?`<button class="button danger module-danger" data-module-remove="${escapeHtml(module.id)}">Remove</button>`:"";
   const policy=module.installed&&!module.core?`<label class="module-auto-update"><input type="checkbox" data-module-auto-update="${escapeHtml(module.id)}" ${module.auto_update?"checked":""}>Automatically apply bundled module updates</label>`:"";
   document.querySelector("#module-detail-actions").innerHTML=`${remove}${policy}${configure}${update}${install}<button class="button secondary" data-module-close>Done</button>`;
+  const configuration=document.querySelector("#module-detail-configuration");
+  configuration.hidden=!module.installed;
+  if(module.installed)await window.ModuleSettings?.open(module);
   dialog.showModal();
+  history.replaceState(null,"",`#${encodeURIComponent(module.id)}`);
 }
 
 async function moduleAction(moduleId,action,options={}){
@@ -89,5 +93,7 @@ document.addEventListener("click",event=>{
 document.addEventListener("change",async event=>{const policy=event.target.closest("[data-module-auto-update]");if(!policy)return;try{await api(`/api/modules/${encodeURIComponent(policy.dataset.moduleAutoUpdate)}/policy`,{method:"PUT",body:JSON.stringify({auto_update:policy.checked})});await loadModules()}catch(error){document.querySelector("#module-status").textContent=error.message}});
 for(const id of ["module-search","module-category","module-installed-only"])document.querySelector(`#${id}`).addEventListener(id==="module-search"?"input":"change",renderModules);
 document.querySelector("#module-refresh").onclick=()=>loadModules("Module catalog checked. Installed modules are current when no update badge appears.");
-document.querySelector("#module-detail-close").onclick=()=>document.querySelector("#module-details").close();
-loadModules();
+function closeModuleDialog(){document.querySelector("#module-details").close();history.replaceState(null,"",location.pathname+location.search)}
+document.querySelector("#module-detail-close").onclick=closeModuleDialog;
+document.querySelector("#module-details").addEventListener("close",()=>{if(location.hash)history.replaceState(null,"",location.pathname+location.search)});
+loadModules().then(()=>{const requested=decodeURIComponent(location.hash.slice(1));if(requested&&moduleById(requested))openModule(requested)});

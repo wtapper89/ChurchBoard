@@ -486,6 +486,8 @@ async def delete_dashboard(identifier: str, request: Request) -> None:
 async def get_settings(request: Request) -> dict:
     require_role(request, "admin")
     settings = store_from(request).public_settings()
+    prodmesh_settings = settings.get("prodmesh_rta", {})
+    settings["prodmesh_rta"]["engine_status"] = request.app.state.runtime.prodmesh_host.status(prodmesh_settings)
     intercom = request.app.state.runtime.intercom.status()
     settings["intercom"]["server_ports"] = {
         "signal": intercom.get("signal_port"),
@@ -1042,15 +1044,59 @@ async def get_runtime(request: Request, compact: bool = False) -> dict:
 @app.post("/api/integrations/prodmesh-rta/test")
 async def test_prodmesh_rta(request: Request) -> dict:
     require_role(request, "admin", "editor")
-    client = ProdMeshRTAClient(store_from(request).load()["settings"].get("prodmesh_rta", {}))
+    settings = store_from(request).load()["settings"].get("prodmesh_rta", {})
+    if str(settings.get("mode") or "embedded") == "embedded":
+        await asyncio.to_thread(request.app.state.runtime.prodmesh_host.configure, settings)
+        settings = {**settings, "host": "127.0.0.1"}
+        await asyncio.sleep(.35)
+    client = ProdMeshRTAClient(settings)
     try:
         if not client.configured: raise HTTPException(400, "Enable ProdMesh Remote RTA and save its address first")
-        levels = await client.levels()
+        levels = None
+        last_error = None
+        for _ in range(20 if str(settings.get("mode") or "embedded") == "embedded" else 1):
+            try:
+                levels = await client.levels()
+                break
+            except Exception as exc:
+                last_error = exc
+                await asyncio.sleep(.25)
+        if levels is None:
+            raise last_error or RuntimeError("The analyzer did not become ready")
         value = levels.get("fast_db")
         return {"connected": True, "message": f"ProdMesh RTA connected · {float(value):.1f} dB" if value is not None else "ProdMesh RTA connected"}
     except HTTPException: raise
     except Exception as exc: raise HTTPException(502, f"Could not connect to ProdMesh RTA: {exc}") from exc
     finally: await client.close()
+
+
+@app.get("/api/integrations/prodmesh-rta/status")
+async def prodmesh_rta_status(request: Request) -> dict:
+    require_role(request, "admin", "editor")
+    settings = store_from(request).load()["settings"].get("prodmesh_rta", {})
+    return request.app.state.runtime.prodmesh_host.status(settings)
+
+
+@app.post("/api/integrations/prodmesh-rta/open")
+async def open_prodmesh_rta(request: Request) -> dict:
+    require_role(request, "admin", "editor")
+    settings = store_from(request).load()["settings"].get("prodmesh_rta", {})
+    if str(settings.get("mode") or "embedded") != "embedded":
+        raise HTTPException(400, "The native audio settings belong to the remote ProdMesh computer")
+    result = await asyncio.to_thread(request.app.state.runtime.prodmesh_host.open, settings)
+    if not result.get("available"):
+        raise HTTPException(503, result.get("error") or "The embedded ProdMesh engine is unavailable")
+    return {**result, "message": "ProdMesh audio and calibration settings are open"}
+
+
+@app.post("/api/integrations/prodmesh-rta/restart")
+async def restart_prodmesh_rta(request: Request) -> dict:
+    require_role(request, "admin", "editor")
+    settings = store_from(request).load()["settings"].get("prodmesh_rta", {})
+    result = await asyncio.to_thread(request.app.state.runtime.prodmesh_host.restart, settings)
+    if result.get("embedded") and not result.get("running"):
+        raise HTTPException(503, result.get("error") or "The embedded ProdMesh engine did not start")
+    return {**result, "message": "Embedded ProdMesh RTA restarted"}
 
 
 @app.get("/api/integrations/lighting/buttons")

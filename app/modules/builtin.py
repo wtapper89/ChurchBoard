@@ -88,10 +88,10 @@ BUILTIN_MODULES = [
     },
     {
         "id": "prodmesh-rta", "name": "ProdMesh Remote RTA", "vendor": "Justin Beale / ProdMesh", "version": "1.0.0",
-        "description": "Live SPL, program loudness, signal health, and 31-band RTA data from ProdMesh Remote RTA.", "category": "Audio measurement",
+        "description": "Self-hosted live SPL, program loudness, signal health, and 31-band RTA—with no separate analyzer installation—or connect another ProdMesh computer.", "category": "Audio measurement",
         "settings_key": "prodmesh_rta", "dependencies": [], "provides": ["churchboard.spl/v1", "churchboard.rta/v1"], "consumes": [],
         "widgets": [widget("prodmesh_rta", "ProdMesh RTA", "Audio & streaming", 5, 4, display_mode="both", metric="fast_db")], "pages": [],
-        "setup": [{"title": "Enable API & Streaming", "text": "In ProdMesh Remote RTA, open Settings → API & Streaming, enable the API, and note the address. The default port is 8517."}, {"title": "Connect ChurchBoard", "text": "Enter the ProdMesh computer address here. No token is required because the API is read-only."}],
+        "setup": [{"title": "Choose embedded or remote", "text": "Embedded mode is included with ChurchBoard and starts automatically. Remote mode connects to ProdMesh on another computer."}, {"title": "Choose and calibrate the input", "text": "For embedded mode, open audio and calibration settings, allow microphone access, and select the measurement mic or interface channel."}],
         "configuration_path": "/modules#prodmesh-rta", "documentation": "/docs/PRODMESH_RTA.md", "frontend": {"renderer": "legacy-adapter"},
     },
     {

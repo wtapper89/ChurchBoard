@@ -10,6 +10,7 @@ permissions:
 
 env:
   LIVEKIT_VERSION: v1.13.5
+  PRODMESH_RTA_REF: ffd8ee2adfa0fcedc9bb846aa1e6a142eda04c06
 
 jobs:
   macos:
@@ -33,6 +34,20 @@ jobs:
           git clone --depth 1 --branch "$LIVEKIT_VERSION" https://github.com/livekit/livekit.git "$RUNNER_TEMP/livekit"
           go -C "$RUNNER_TEMP/livekit" build -trimpath -ldflags="-s -w" -o "$RUNNER_TEMP/livekit-server" ./cmd/server
           echo "CHURCHBOARD_LIVEKIT_SERVER_PATH=$RUNNER_TEMP/livekit-server" >> "$GITHUB_ENV"
+      - name: Build embedded ProdMesh Remote RTA
+        run: |
+          brew install qt cmake ninja
+          git clone https://github.com/jbeale/prodmesh-rta.git "$RUNNER_TEMP/prodmesh-rta"
+          git -C "$RUNNER_TEMP/prodmesh-rta" checkout "$PRODMESH_RTA_REF"
+          cmake -S "$RUNNER_TEMP/prodmesh-rta" -B "$RUNNER_TEMP/prodmesh-rta/build" -G Ninja -DCMAKE_PREFIX_PATH="$(brew --prefix qt)" -DCMAKE_BUILD_TYPE=Release
+          cmake --build "$RUNNER_TEMP/prodmesh-rta/build"
+          "$(brew --prefix qtbase)/bin/macdeployqt" "$RUNNER_TEMP/prodmesh-rta/build/ProdMeshRemoteRTA.app" -no-plugins
+          mkdir -p "$RUNNER_TEMP/prodmesh-rta/build/ProdMeshRemoteRTA.app/Contents/PlugIns/platforms"
+          cp "$(brew --prefix qtbase)/share/qt/plugins/platforms/libqcocoa.dylib" "$RUNNER_TEMP/prodmesh-rta/build/ProdMeshRemoteRTA.app/Contents/PlugIns/platforms/"
+          xattr -cr "$RUNNER_TEMP/prodmesh-rta/build/ProdMeshRemoteRTA.app"
+          codesign --force --deep --sign - "$RUNNER_TEMP/prodmesh-rta/build/ProdMeshRemoteRTA.app"
+          echo "CHURCHBOARD_PRODMESH_RTA_BUNDLE=$RUNNER_TEMP/prodmesh-rta/build/ProdMeshRemoteRTA.app" >> "$GITHUB_ENV"
+          echo "CHURCHBOARD_REQUIRE_PRODMESH_RTA=1" >> "$GITHUB_ENV"
       - run: chmod +x installers/macos/build.sh "installers/macos/Uninstall ChurchBoard.command"
       - run: PYTHON=python3 installers/macos/build.sh
         env:
@@ -59,12 +74,29 @@ jobs:
         with:
           go-version: "1.26.x"
           cache: false
+      - uses: jurplel/install-qt-action@v4
+        with:
+          version: "6.8.3"
+          modules: "qtmultimedia"
+          cache: true
       - name: Build hosted intercom engine
         shell: powershell
         run: |
           git clone --depth 1 --branch $env:LIVEKIT_VERSION https://github.com/livekit/livekit.git "$env:RUNNER_TEMP\livekit"
           go -C "$env:RUNNER_TEMP\livekit" build -trimpath -ldflags="-s -w" -o "$env:RUNNER_TEMP\livekit-server.exe" ./cmd/server
           "CHURCHBOARD_LIVEKIT_SERVER_PATH=$env:RUNNER_TEMP\livekit-server.exe" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+      - name: Build embedded ProdMesh Remote RTA
+        shell: powershell
+        run: |
+          choco install cmake ninja -y --no-progress
+          git clone https://github.com/jbeale/prodmesh-rta.git "$env:RUNNER_TEMP\prodmesh-rta"
+          git -C "$env:RUNNER_TEMP\prodmesh-rta" checkout $env:PRODMESH_RTA_REF
+          cmake -S "$env:RUNNER_TEMP\prodmesh-rta" -B "$env:RUNNER_TEMP\prodmesh-rta\build" -G Ninja -DCMAKE_PREFIX_PATH="$env:QT_ROOT_DIR" -DCMAKE_BUILD_TYPE=Release
+          cmake --build "$env:RUNNER_TEMP\prodmesh-rta\build"
+          windeployqt --release "$env:RUNNER_TEMP\prodmesh-rta\build\ProdMeshRemoteRTA.exe"
+          if (Test-Path "$env:QT_ROOT_DIR\LICENSES") { Copy-Item "$env:QT_ROOT_DIR\LICENSES" "$env:RUNNER_TEMP\prodmesh-rta\build\Qt-LICENSES" -Recurse }
+          "CHURCHBOARD_PRODMESH_RTA_BUNDLE=$env:RUNNER_TEMP\prodmesh-rta\build" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "CHURCHBOARD_REQUIRE_PRODMESH_RTA=1" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
       - run: choco install innosetup -y --no-progress
       - shell: powershell
         run: ./installers/windows/Build-Windows.ps1
@@ -90,6 +122,28 @@ jobs:
           git clone --depth 1 --branch "$LIVEKIT_VERSION" https://github.com/livekit/livekit.git "$RUNNER_TEMP/livekit"
           go -C "$RUNNER_TEMP/livekit" build -trimpath -ldflags="-s -w" -o "$RUNNER_TEMP/livekit-server" ./cmd/server
           echo "CHURCHBOARD_LIVEKIT_SERVER_PATH=$RUNNER_TEMP/livekit-server" >> "$GITHUB_ENV"
+      - name: Build embedded ProdMesh Remote RTA
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake ninja-build qt6-base-dev qt6-multimedia-dev libgl1-mesa-dev libpulse-dev
+          git clone https://github.com/jbeale/prodmesh-rta.git "$RUNNER_TEMP/prodmesh-rta"
+          git -C "$RUNNER_TEMP/prodmesh-rta" checkout "$PRODMESH_RTA_REF"
+          cmake -S "$RUNNER_TEMP/prodmesh-rta" -B "$RUNNER_TEMP/prodmesh-rta/build" -G Ninja -DCMAKE_BUILD_TYPE=Release
+          cmake --build "$RUNNER_TEMP/prodmesh-rta/build"
+          mkdir -p "$RUNNER_TEMP/prodmesh-bundle"
+          cp "$RUNNER_TEMP/prodmesh-rta/build/ProdMeshRemoteRTA" "$RUNNER_TEMP/prodmesh-bundle/"
+          ldd "$RUNNER_TEMP/prodmesh-rta/build/ProdMeshRemoteRTA" | awk '/=> \/.*\.so/{print $3}' | xargs -r -I{} cp -L "{}" "$RUNNER_TEMP/prodmesh-bundle/"
+          mkdir -p "$RUNNER_TEMP/prodmesh-bundle/plugins"
+          cp -R /usr/lib/x86_64-linux-gnu/qt6/plugins/platforms "$RUNNER_TEMP/prodmesh-bundle/plugins/"
+          if [ -d /usr/lib/x86_64-linux-gnu/qt6/plugins/multimedia ]; then cp -R /usr/lib/x86_64-linux-gnu/qt6/plugins/multimedia "$RUNNER_TEMP/prodmesh-bundle/plugins/"; fi
+          for pass in 1 2; do
+            find "$RUNNER_TEMP/prodmesh-bundle" -type f -exec ldd {} \; 2>/dev/null | awk '/=> \/.*\.so/{print $3}' | sort -u | xargs -r -I{} cp -Ln "{}" "$RUNNER_TEMP/prodmesh-bundle/"
+          done
+          mkdir -p "$RUNNER_TEMP/prodmesh-bundle/Qt-LICENSES"
+          cp /usr/share/doc/qt6-base-dev/copyright "$RUNNER_TEMP/prodmesh-bundle/Qt-LICENSES/qt6-base-copyright"
+          cp /usr/share/doc/qt6-multimedia-dev/copyright "$RUNNER_TEMP/prodmesh-bundle/Qt-LICENSES/qt6-multimedia-copyright"
+          echo "CHURCHBOARD_PRODMESH_RTA_BUNDLE=$RUNNER_TEMP/prodmesh-bundle" >> "$GITHUB_ENV"
+          echo "CHURCHBOARD_REQUIRE_PRODMESH_RTA=1" >> "$GITHUB_ENV"
       - run: chmod +x installers/linux/*.sh installers/linux/debian/*
       - run: PYTHON=python3 installers/linux/build.sh
       - uses: actions/upload-artifact@v6

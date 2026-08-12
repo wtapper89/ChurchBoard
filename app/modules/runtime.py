@@ -31,6 +31,7 @@ from app.modules.media_cache import PlanningCenterMediaCache
 from app.modules.ndi import NDIRuntime
 from app.modules.livekit import HostedIntercomServer
 from app.modules.prodmesh_rta import ProdMeshRTAClient
+from app.modules.prodmesh_host import HostedProdMeshRTA
 from app.store import ConfigStore
 
 
@@ -41,7 +42,7 @@ class RuntimeService:
         self.state: dict[str, Any] = self.demo_state()
         self._task: asyncio.Task | None = None
         self._stop = asyncio.Event()
-        self._last_refresh = {"planning_center": 0.0, "planning_center_detail": 0.0, "planning_center_live": 0.0, "propresenter": 0.0, "shure": 0.0, "sennheiser": 0.0, "prodmesh_rta": 0.0, "restream": 0.0, "obs": 0.0, "streams": 0.0}
+        self._last_refresh = {"planning_center": 0.0, "planning_center_detail": 0.0, "planning_center_live": 0.0, "propresenter": 0.0, "shure": 0.0, "sennheiser": 0.0, "prodmesh_host": 0.0, "prodmesh_rta": 0.0, "restream": 0.0, "obs": 0.0, "streams": 0.0}
         self._service_control: dict[str, Any] = {"active": False}
         self._pp_live_candidate = ""
         self._pp_live_candidate_since = 0.0
@@ -60,6 +61,7 @@ class RuntimeService:
         self._obs_key: tuple[Any, ...] | None = None
         self._prodmesh_client: ProdMeshRTAClient | None = None
         self._prodmesh_key: tuple[Any, ...] | None = None
+        self.prodmesh_host = HostedProdMeshRTA()
         self.media_cache = PlanningCenterMediaCache(store.path)
         self.ndi = NDIRuntime()
         self.intercom = HostedIntercomServer(store.path)
@@ -159,6 +161,7 @@ class RuntimeService:
         if self._prodmesh_client is not None:
             await self._prodmesh_client.close()
             self._prodmesh_client = None
+        self.prodmesh_host.stop()
         if self._planning_center_detail_task is not None:
             self._planning_center_detail_task.cancel()
             try:
@@ -186,6 +189,10 @@ class RuntimeService:
         config = stored_data["settings"]
         self.ndi.configure(config.get("ndi", {}))
         self.intercom.configure(config.get("intercom", {}))
+        host_clock = time.monotonic()
+        if force or host_clock - self._last_refresh["prodmesh_host"] >= 1.0:
+            self._last_refresh["prodmesh_host"] = host_clock
+            await asyncio.to_thread(self.prodmesh_host.configure, config.get("prodmesh_rta", {}))
         osm_settings = config.get("open_sound_meter", {})
         if osm_settings.get("enabled"):
             try:
@@ -228,15 +235,18 @@ class RuntimeService:
             self._apply_plan_detail(next_state, next_state.get("service"), config)
         clock = time.monotonic()
         prodmesh_settings = config.get("prodmesh_rta", {})
-        prodmesh_key = (bool(prodmesh_settings.get("enabled")), str(prodmesh_settings.get("host") or ""), int(prodmesh_settings.get("port") or 8517))
+        prodmesh_mode = str(prodmesh_settings.get("mode") or "embedded")
+        prodmesh_host = "127.0.0.1" if prodmesh_mode == "embedded" else str(prodmesh_settings.get("host") or "")
+        effective_prodmesh_settings = {**prodmesh_settings, "host": prodmesh_host}
+        prodmesh_key = (bool(prodmesh_settings.get("enabled")), prodmesh_mode, prodmesh_host, int(prodmesh_settings.get("port") or 8517))
         if self._prodmesh_client is None or prodmesh_key != self._prodmesh_key:
             if self._prodmesh_client is not None: await self._prodmesh_client.close()
-            self._prodmesh_client, self._prodmesh_key = ProdMeshRTAClient(prodmesh_settings), prodmesh_key
+            self._prodmesh_client, self._prodmesh_key = ProdMeshRTAClient(effective_prodmesh_settings), prodmesh_key
         prodmesh_due = clock - self._last_refresh["prodmesh_rta"] >= max(.1, float(prodmesh_settings.get("refresh_seconds") or .25))
         if self._prodmesh_client.configured and (force or prodmesh_due):
             self._last_refresh["prodmesh_rta"] = clock
-            try: next_state["prodmesh_rta"] = await self._prodmesh_client.levels()
-            except Exception as exc: next_state["prodmesh_rta"] = {"connected": False, "error": str(exc)}
+            try: next_state["prodmesh_rta"] = {**await self._prodmesh_client.levels(), "host": self.prodmesh_host.status(prodmesh_settings)}
+            except Exception as exc: next_state["prodmesh_rta"] = {"connected": False, "error": str(exc), "host": self.prodmesh_host.status(prodmesh_settings)}
         elif not self._prodmesh_client.configured:
             next_state["prodmesh_rta"] = {"connected": False, "error": "ProdMesh RTA is not enabled"}
         propresenter_settings = config.get("propresenter", {})

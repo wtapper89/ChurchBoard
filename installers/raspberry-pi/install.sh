@@ -4,6 +4,7 @@ set -euo pipefail
 REPOSITORY="${CHURCHBOARD_REPOSITORY:-wtapper89/ChurchBoard}"
 REF="${CHURCHBOARD_REF:-main}"
 LIVEKIT_VERSION="1.13.5"
+PRODMESH_RTA_REF="ffd8ee2adfa0fcedc9bb846aa1e6a142eda04c06"
 ENABLE_KIOSK=false
 
 usage() {
@@ -42,7 +43,7 @@ done
 
 echo "Installing Raspberry Pi prerequisites…"
 sudo apt-get update
-sudo apt-get install -y python3 python3-venv python3-pip curl ca-certificates
+sudo apt-get install -y python3 python3-venv python3-pip curl ca-certificates git cmake ninja-build qt6-base-dev qt6-multimedia-dev libgl1-mesa-dev libpulse-dev
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd || true)"
 LOCAL_PROJECT="$(cd "$SCRIPT_DIR/../.." 2>/dev/null && pwd || true)"
@@ -80,6 +81,19 @@ restore_previous_install() {
 
 mkdir -p "$INSTALL_DIR"
 /bin/cp -R "$SOURCE_DIR/app" "$SOURCE_DIR/run.py" "$SOURCE_DIR/requirements.txt" "$INSTALL_DIR/"
+
+echo "Building ChurchBoard's embedded ProdMesh RTA engine…"
+PRODMESH_SOURCE="$(mktemp -d)"
+git clone https://github.com/jbeale/prodmesh-rta.git "$PRODMESH_SOURCE"
+git -C "$PRODMESH_SOURCE" checkout "$PRODMESH_RTA_REF"
+cmake -S "$PRODMESH_SOURCE" -B "$PRODMESH_SOURCE/build" -G Ninja -DCMAKE_BUILD_TYPE=Release
+cmake --build "$PRODMESH_SOURCE/build"
+mkdir -p "$INSTALL_DIR/prodmesh-rta/Qt-LICENSES"
+install -m 0755 "$PRODMESH_SOURCE/build/ProdMeshRemoteRTA" "$INSTALL_DIR/prodmesh-rta/ProdMeshRemoteRTA"
+cp /usr/share/doc/qt6-base-dev/copyright "$INSTALL_DIR/prodmesh-rta/Qt-LICENSES/qt6-base-copyright"
+cp /usr/share/doc/qt6-multimedia-dev/copyright "$INSTALL_DIR/prodmesh-rta/Qt-LICENSES/qt6-multimedia-copyright"
+install -m 0644 "$SOURCE_DIR/packaging/licenses/prodmesh-rta.LICENSE" "$INSTALL_DIR/prodmesh-rta/LICENSE"
+/bin/rm -rf "$PRODMESH_SOURCE"
 
 case "$(uname -m)" in
   aarch64|arm64) LIVEKIT_ARCH="arm64"; LIVEKIT_SHA256="332015305518765fe05bad74fc3a9d9583e635e7dd130de3c4fc563d69c550f3" ;;

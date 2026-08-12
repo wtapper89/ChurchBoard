@@ -32,7 +32,7 @@ See ChurchBoard in action and follow the setup walkthrough in the **[ChurchBoard
 - Current item and overall service timing
 - Team-member lists with photos, filtered by team and position
 - Direct Open Sound Meter monitoring with selectable weighting/response and downloadable service graphs and per-item averages
-- ProdMesh Remote RTA monitoring with SPL, program loudness, signal state, and a responsive 31-band analyzer
+- Self-hosted ProdMesh Remote RTA monitoring—with no separate ProdMesh installation—for SPL, program loudness, signal state, and a responsive 31-band analyzer; remote analyzers remain supported
 - ShowXpress/TheLightingController cue-button pages contributed by WorshipWarehouse
 - Restream broadcast, viewer, and destination-status monitoring through OAuth
 - OBS Studio streaming/recording state, connection health, output statistics, dropped-frame warnings, and an optional preview image
@@ -131,7 +131,7 @@ The Producer workflow is responsive for phones and tablets, keeping service sele
 
 ChurchBoard's visual microphone-monitoring direction was inspired by [Micboard](https://micboard.io/) by Karl Swanson, an independent MIT-licensed project for network-enabled Shure devices. The initial cross-platform dashboard concept also drew inspiration from [NewsTalentMonitorPlus](https://github.com/wtapper89/NewsTalentMonitorPlus). ChurchBoard is a separate implementation and does not bundle either project's code or assets.
 
-Special thanks to [Caleb Hines (@WorshipWarehouse)](https://github.com/WorshipWarehouse) for the ChurchBoard integration and dashboard contributions, including Open Sound Meter, Restream, OBS Studio, scheduled-person consolidation, complete service-order display modes, Sennheiser EW-DX and Shure SLX-D monitoring, ProPresenter playlist control and timers, ShowXpress/TheLightingController support, dashboard lifecycle controls, and responsive fullscreen improvements. Thanks also to [Justin Beale (@jbeale)](https://github.com/jbeale), creator of the MIT-licensed ProdMesh Remote RTA used through its documented read-only API. The original commits and authorship are preserved in the project history. See [Contributors](CONTRIBUTORS.md).
+Special thanks to [Caleb Hines (@WorshipWarehouse)](https://github.com/WorshipWarehouse) for the ChurchBoard integration and dashboard contributions, including Open Sound Meter, Restream, OBS Studio, scheduled-person consolidation, complete service-order display modes, Sennheiser EW-DX and Shure SLX-D monitoring, ProPresenter playlist control and timers, ShowXpress/TheLightingController support, dashboard lifecycle controls, and responsive fullscreen improvements. Thanks also to [Justin Beale (@jbeale)](https://github.com/jbeale), creator of the MIT-licensed ProdMesh Remote RTA engine bundled and supervised by ChurchBoard. The original commits and authorship are preserved in the project history. See [Contributors](CONTRIBUTORS.md).
 
 The people shown in demonstration mode and documentation are AI-generated fictional samples, not real team members. ChurchBoard is independently developed and is not affiliated with or endorsed by Planning Center, Shure, Renewed Vision/ProPresenter, Micboard, Apple, Microsoft, or Raspberry Pi.
 

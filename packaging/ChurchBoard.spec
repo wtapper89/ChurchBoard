@@ -20,12 +20,22 @@ datas = [
     (str(project / "LICENSE"), "."),
     (str(project / "LEGAL.md"), "."),
     (str(project / "THIRD_PARTY_NOTICES.md"), "."),
+    (str(project / "packaging" / "licenses" / "prodmesh-rta.LICENSE"), "legal/prodmesh-rta"),
+    (str(project / "packaging" / "licenses" / "qt-LGPL-3.0-only.txt"), "legal/qt"),
 ]
 collected_licenses = project / "build" / "legal" / "third-party"
 if collected_licenses.is_dir():
     datas.append((str(collected_licenses), "legal/third-party"))
 tray_hidden_imports = []
 binaries = []
+prodmesh_bundle = Path(os.getenv("CHURCHBOARD_PRODMESH_RTA_BUNDLE") or "").expanduser()
+if prodmesh_bundle.exists():
+    archive_base = project / "build" / "packaging" / "prodmesh-rta-bundle"
+    archive_base.parent.mkdir(parents=True, exist_ok=True)
+    archive_path = Path(shutil.make_archive(str(archive_base), "gztar", root_dir=prodmesh_bundle.parent, base_dir=prodmesh_bundle.name))
+    datas.append((str(archive_path), "."))
+elif os.getenv("CHURCHBOARD_REQUIRE_PRODMESH_RTA", "").casefold() in {"1", "true", "yes", "on"}:
+    raise SystemExit("This release build requires a bundled ProdMesh Remote RTA engine")
 livekit_server = Path(os.getenv("CHURCHBOARD_LIVEKIT_SERVER_PATH") or shutil.which("livekit-server") or "").expanduser()
 if livekit_server.is_file():
     binaries.append((str(livekit_server), "livekit-server"))
@@ -120,6 +130,7 @@ if sys.platform == "darwin":
             "CFBundleVersion": app_version,
             "NSHighResolutionCapable": True,
             "NSLocalNetworkUsageDescription": "ChurchBoard discovers NDI sources and connects production devices and its hosted intercom on your local network.",
+            "NSMicrophoneUsageDescription": "ChurchBoard's embedded ProdMesh RTA uses the selected audio input to measure sound level and frequency response.",
             "LSUIElement": False,
         },
     )

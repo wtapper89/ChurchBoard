@@ -7,7 +7,7 @@ import tempfile
 import unittest
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 from app.models import Dashboard
 from app.modules.planning_center import PlanningCenterClient, calculate_timing, consolidate_people, item_leader, people_for_service_time, position_key, selected_service_time, service_items
@@ -20,6 +20,7 @@ from app.modules.propresenter import ProPresenterClient
 from app.modules.restream import RestreamClient
 from app.modules.runtime import RuntimeService
 from app.modules.prodmesh_rta import ProdMeshRTAClient
+from app.modules.prodmesh_host import HostedProdMeshRTA
 from app.modules.thelightingcontroller import TheLightingControllerClient
 from app.store import ConfigStore
 
@@ -40,6 +41,26 @@ class ModuleIntegrationTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(result["connected"])
         self.assertEqual(result["fast_db"], 82.4)
         self.assertEqual(result["bands_db"], [61.2, 63.8])
+
+    def test_embedded_prodmesh_host_starts_and_supervises_bundled_engine(self):
+        host = HostedProdMeshRTA()
+        process = MagicMock()
+        process.poll.return_value = None
+        process.pid = 8517
+        with patch.object(host, "executable", return_value=Path("/tmp/ProdMeshRemoteRTA")), patch("app.modules.prodmesh_host.subprocess.Popen", return_value=process) as start:
+            host.configure({"enabled": True, "mode": "embedded", "port": 8517})
+            host.configure({"enabled": True, "mode": "embedded", "port": 8517})
+        self.assertEqual(start.call_count, 1)
+        self.assertEqual(start.call_args.args[0], ["/tmp/ProdMeshRemoteRTA", "--api", "8517"])
+        self.assertTrue(host.status({"enabled": True, "mode": "embedded"})["running"])
+
+    def test_embedded_prodmesh_host_reports_missing_engine(self):
+        host = HostedProdMeshRTA()
+        with patch.object(host, "executable", return_value=None):
+            host.configure({"enabled": True, "mode": "embedded", "port": 8517})
+            status = host.status({"enabled": True, "mode": "embedded"})
+        self.assertFalse(status["available"])
+        self.assertIn("does not contain", status["error"])
 
     def test_lighting_button_list_handles_zero_based_controller_coordinates(self):
         xml = '<pages><page name="Live" columns="2"><button column="0" line="0" color="#ff0000" pressed="1">Verse</button><button column="1" line="0">Chorus</button></page></pages>'
@@ -78,6 +99,7 @@ class StoreTests(unittest.TestCase):
             self.assertNotIn("theme", store.load()["dashboards"][0])
             self.assertEqual(store.load()["settings"]["planning_center"]["service_types"], [])
             self.assertEqual(store.load()["settings"]["server"]["producer_port"], 80)
+            self.assertEqual(store.load()["settings"]["prodmesh_rta"]["mode"], "embedded")
             self.assertTrue(store.load()["settings"]["server"]["producer_port_enabled"])
             self.assertEqual(store.load()["settings"]["intercom"]["party_lines"][0]["id"], "production")
             self.assertFalse(store.load()["settings"]["ndi"]["enabled"])

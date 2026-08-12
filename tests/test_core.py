@@ -10,16 +10,44 @@ from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
 from app.models import Dashboard
-from app.services.planning_center import PlanningCenterClient, calculate_timing, consolidate_people, item_leader, people_for_service_time, position_key, selected_service_time, service_items
-from app.services.livekit import HostedIntercomServer, access_token
-from app.services.ndi import NDIRuntime
-from app.services.media_cache import PlanningCenterMediaCache
-from app.services.shure import ShureClient, battery_percent, percent, transmitter_active
-from app.services.sennheiser import parse_ssc_response, ssc_request
-from app.services.propresenter import ProPresenterClient
-from app.services.restream import RestreamClient
-from app.services.runtime import RuntimeService
+from app.modules.planning_center import PlanningCenterClient, calculate_timing, consolidate_people, item_leader, people_for_service_time, position_key, selected_service_time, service_items
+from app.modules.livekit import HostedIntercomServer, access_token
+from app.modules.ndi import NDIRuntime
+from app.modules.media_cache import PlanningCenterMediaCache
+from app.modules.shure import ShureClient, battery_percent, percent, transmitter_active
+from app.modules.sennheiser import parse_ssc_response, ssc_request
+from app.modules.propresenter import ProPresenterClient
+from app.modules.restream import RestreamClient
+from app.modules.runtime import RuntimeService
+from app.modules.prodmesh_rta import ProdMeshRTAClient
+from app.modules.thelightingcontroller import TheLightingControllerClient
 from app.store import ConfigStore
+
+
+class ModuleIntegrationTests(unittest.IsolatedAsyncioTestCase):
+    async def test_prodmesh_rta_combines_level_and_band_payloads(self):
+        class Response:
+            def __init__(self, payload): self.payload = payload
+            def raise_for_status(self): return None
+            def json(self): return self.payload
+        class Http:
+            async def get(self, url):
+                return Response({"fast_db": 82.4, "mode": "acoustic", "signal": {"state": "ok"}} if url.endswith("/api/spl") else {"centers_hz": [20, 25], "bands_db": [61.2, 63.8]})
+            async def aclose(self): return None
+        client = ProdMeshRTAClient({"enabled": True, "host": "10.0.0.8", "port": 8517})
+        await client._client.aclose(); client._client = Http()
+        result = await client.levels()
+        self.assertTrue(result["connected"])
+        self.assertEqual(result["fast_db"], 82.4)
+        self.assertEqual(result["bands_db"], [61.2, 63.8])
+
+    def test_lighting_button_list_handles_zero_based_controller_coordinates(self):
+        xml = '<pages><page name="Live" columns="2"><button column="0" line="0" color="#ff0000" pressed="1">Verse</button><button column="1" line="0">Chorus</button></page></pages>'
+        root = __import__("xml.etree.ElementTree", fromlist=["ElementTree"]).fromstring(xml)
+        elements = list(root.find("page").findall("button"))
+        offset = 1 if any(element.get(axis) == "0" for element in elements for axis in ("column", "line")) else 0
+        self.assertEqual(offset, 1)
+        self.assertEqual([int(item.get("column")) + offset for item in elements], [1, 2])
 
 
 class StoreTests(unittest.TestCase):
@@ -112,7 +140,7 @@ class StoreTests(unittest.TestCase):
             self.assertEqual(intercom["url"], "")
 
     def test_ndi_sdk_root_resolves_the_nested_macos_runtime(self):
-        with patch("app.services.ndi.platform.system", return_value="Darwin"):
+        with patch("app.modules.ndi.platform.system", return_value="Darwin"):
             candidates = [str(path) for path in NDIRuntime._candidates("/Library/NDI SDK for Apple")]
         self.assertIn("/Library/NDI SDK for Apple/lib/macOS/libndi.dylib", candidates)
 
@@ -489,7 +517,7 @@ class PlanningCenterCatalogTests(unittest.IsolatedAsyncioTestCase):
                 "id": "media-1", "title": "Audio Instructions", "filename": "Audio.pdf",
                 "content_type": "application/pdf", "download_action_url": "https://api.example.test/attachment/open",
             }
-            with patch("app.services.media_cache.httpx.AsyncClient", return_value=Downloader()):
+            with patch("app.modules.media_cache.httpx.AsyncClient", return_value=Downloader()):
                 result = await cache.sync(client, {"tag-audio": [resource]})
             cached = cache.file_for("media-1")
             self.assertTrue(result["tag-audio"][0]["cached"])
@@ -562,7 +590,7 @@ class ShureStatusTests(unittest.IsolatedAsyncioTestCase):
 
         client = ShureClient({"enabled": True})
         receiver = {"id": "rack-a", "name": "Rack A", "host": "192.0.2.1", "port": 2202, "channels": 1}
-        with patch("app.services.shure.asyncio.open_connection", AsyncMock(return_value=(Reader(), Writer()))):
+        with patch("app.modules.shure.asyncio.open_connection", AsyncMock(return_value=(Reader(), Writer()))):
             mic = (await client._receiver(receiver))[0]
         self.assertFalse(mic["online"])
         self.assertTrue(mic["receiver_online"])
@@ -675,14 +703,14 @@ class RuntimeAssignmentTests(unittest.TestCase):
             }
             state = {"service": service}
             first = {"current_item_id": "one", "current_item_time_id": "time-one", "current_live_start_at": "2000-01-01T12:00:00+00:00"}
-            with patch("app.services.runtime.time.monotonic", return_value=1000):
+            with patch("app.modules.runtime.time.monotonic", return_value=1000):
                 runtime._apply_live_timing(state, first)
             self.assertTrue(state["timing"]["rehearsal"])
             self.assertEqual(state["timing"]["item_elapsed"], 0)
             self.assertEqual(state["timing"]["overall_delta"], 0)
 
             second = {"current_item_id": "two", "current_item_time_id": "time-two", "current_live_start_at": "2000-01-01T12:01:00+00:00"}
-            with patch("app.services.runtime.time.monotonic", return_value=1075):
+            with patch("app.modules.runtime.time.monotonic", return_value=1075):
                 runtime._apply_live_timing(state, second)
             self.assertEqual(state["timing"]["current_item"]["id"], "two")
             self.assertEqual(state["timing"]["item_elapsed"], 0)
@@ -700,7 +728,7 @@ class RuntimeAssignmentTests(unittest.TestCase):
                 ],
             }
             state = {"service": service, "timing": calculate_timing(service)}
-            with patch("app.services.runtime.time.monotonic", return_value=1000):
+            with patch("app.modules.runtime.time.monotonic", return_value=1000):
                 runtime._apply_provisional_rehearsal_target(
                     state,
                     service["items"][1],
@@ -712,7 +740,7 @@ class RuntimeAssignmentTests(unittest.TestCase):
             self.assertEqual(state["timing"]["item_elapsed"], 0)
 
             stale_live = {"current_item_id": "grace", "current_item_time_id": "pco-old", "current_live_start_at": "2000-01-01T12:00:00+00:00"}
-            with patch("app.services.runtime.time.monotonic", return_value=1005):
+            with patch("app.modules.runtime.time.monotonic", return_value=1005):
                 runtime._apply_live_timing(state, stale_live)
             self.assertEqual(state["timing"]["item_elapsed"], 5)
 
@@ -776,7 +804,7 @@ class RuntimeAssignmentTests(unittest.TestCase):
                 return Response()
 
         fake = Client()
-        with patch("app.services.runtime.httpx.AsyncClient", return_value=fake):
+        with patch("app.modules.runtime.httpx.AsyncClient", return_value=fake):
             statuses = asyncio.run(RuntimeService._livestream_statuses([{
                 "id": "facebook",
                 "provider": "facebook",
@@ -846,7 +874,7 @@ class RuntimeAssignmentTests(unittest.TestCase):
                 await asyncio.sleep(0)
                 return await runtime.refresh()
 
-            with patch("app.services.runtime.PlanningCenterClient", FakePlanningCenterClient), patch("app.services.runtime.time.monotonic", return_value=106):
+            with patch("app.modules.runtime.PlanningCenterClient", FakePlanningCenterClient), patch("app.modules.runtime.time.monotonic", return_value=106):
                 state = asyncio.run(refresh_twice())
 
             self.assertEqual([item["id"] for item in state["service"]["items"]], ["welcome", "new-song"])
@@ -1035,7 +1063,7 @@ class ProPresenterLiveSyncTests(unittest.IsolatedAsyncioTestCase):
                     return {**_live, "current_item_id": "2", "current_live_start_at": "2030-01-01T12:01:00Z"}
 
             client = FakeClient()
-            with patch("app.services.runtime.PlanningCenterClient", return_value=client):
+            with patch("app.modules.runtime.PlanningCenterClient", return_value=client):
                 state = await runtime.service_control("next")
             self.assertEqual(client.action, "go_to_next_item")
             self.assertEqual(state["timing"]["current_item"]["id"], "2")
@@ -1337,7 +1365,7 @@ class ProPresenterPollingTests(unittest.IsolatedAsyncioTestCase):
 
         fake = FakeHttp()
         client = ProPresenterClient({"enabled": True, "host": "127.0.0.1", "port": 50001})
-        with patch("app.services.propresenter.httpx.AsyncClient", return_value=fake):
+        with patch("app.modules.propresenter.httpx.AsyncClient", return_value=fake):
             content, media_type = await client.thumbnail("ABC-123", 3)
         self.assertEqual(content, b"jpeg")
         self.assertEqual(media_type, "image/jpeg")

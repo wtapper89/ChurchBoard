@@ -87,6 +87,22 @@ BUILTIN_MODULES = [
         "configuration_path": "/modules#open-sound-meter", "documentation": "/docs/OPEN_SOUND_METER.md", "frontend": {"renderer": "legacy-adapter"},
     },
     {
+        "id": "prodmesh-rta", "name": "ProdMesh Remote RTA", "vendor": "Justin Beale / ProdMesh", "version": "1.0.0",
+        "description": "Live SPL, program loudness, signal health, and 31-band RTA data from ProdMesh Remote RTA.", "category": "Audio measurement",
+        "settings_key": "prodmesh_rta", "dependencies": [], "provides": ["churchboard.spl/v1", "churchboard.rta/v1"], "consumes": [],
+        "widgets": [widget("prodmesh_rta", "ProdMesh RTA", "Audio & streaming", 5, 4, display_mode="both", metric="fast_db")], "pages": [],
+        "setup": [{"title": "Enable API & Streaming", "text": "In ProdMesh Remote RTA, open Settings → API & Streaming, enable the API, and note the address. The default port is 8517."}, {"title": "Connect ChurchBoard", "text": "Enter the ProdMesh computer address here. No token is required because the API is read-only."}],
+        "configuration_path": "/modules#prodmesh-rta", "documentation": "/docs/PRODMESH_RTA.md", "frontend": {"renderer": "legacy-adapter"},
+    },
+    {
+        "id": "showxpress-lighting", "name": "ShowXpress / TheLightingController", "vendor": "WorshipWarehouse / SweetLight", "version": "1.0.0",
+        "description": "Discover and trigger ShowXpress or TheLightingController External Application buttons from a ChurchBoard page.", "category": "Lighting",
+        "settings_key": "lighting", "dependencies": [], "provides": ["churchboard.lighting-control/v1"], "consumes": [],
+        "widgets": [widget("lighting", "Lighting controls", "Lighting", 5, 4)], "pages": [],
+        "setup": [{"title": "Enable External Control", "text": "In ShowXpress/TLC, enable External Application control and choose a password if desired."}, {"title": "Connect the controller", "text": "Enter its computer address and External App port (normally 7348)."}],
+        "configuration_path": "/modules#showxpress-lighting", "frontend": {"renderer": "legacy-adapter"},
+    },
+    {
         "id": "obs-studio", "name": "OBS Studio", "vendor": "OBS Project", "version": "2.0.0",
         "description": "Streaming, recording, scene, performance, dropped-frame, audio, source, and preview monitoring.", "category": "Streaming",
         "settings_key": "obs", "dependencies": [], "provides": ["churchboard.broadcast-health/v1"], "consumes": [],

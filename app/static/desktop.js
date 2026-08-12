@@ -6,9 +6,13 @@ const installUpdate = document.querySelector("#install-update");
 const releaseLink = document.querySelector("#release-link");
 
 function boardLetters(value) {
-  const words=String(value||"Board").trim().split(/\s+/).filter(Boolean);
-  const characters=(words.length>1?words.map(word=>word[0]):[...(words[0]||"B")].slice(0,3)).join("").toLocaleUpperCase();
-  return [...characters].map(character=>`<b>${escapeHtml(character)}</b>`).join("");
+  const words=String(value||"Board").trim().toLocaleUpperCase().split(/\s+/).filter(Boolean),rows=[];
+  for(const word of words){
+    if(word.length<=9)rows.push(word);
+    else for(let start=0;start<word.length;start+=8)rows.push(word.slice(start,start+8)+(start+8<word.length?"-":""));
+  }
+  const max=Math.max(1,...rows.map(row=>[...row].length));
+  return `<span class="desktop-board-letter-rows" style="--letter-rows:${rows.length};--max-letters:${max}">${rows.map(row=>`<span>${[...row].map(character=>`<b>${escapeHtml(character)}</b>`).join("")}</span>`).join("")}</span>`;
 }
 
 async function loadDesktop() {

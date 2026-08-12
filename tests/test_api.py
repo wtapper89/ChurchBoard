@@ -10,7 +10,7 @@ from unittest.mock import patch
 from fastapi.testclient import TestClient
 
 from app.main import app
-from app.services.osm import parse_osm_packet
+from app.modules.osm import parse_osm_packet
 
 
 class ApiTests(unittest.TestCase):

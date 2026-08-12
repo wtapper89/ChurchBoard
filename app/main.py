@@ -27,12 +27,14 @@ from app.auth import AuthManager, password_hash, public_user, require_role, requ
 from app.models import Dashboard, SettingsUpdate
 from app.modules import ModuleRegistry
 from app.producer import add_activity, producer_context, save_resource, save_template, set_completion
-from app.services.runtime import RuntimeService
-from app.services.spl_reports import SPLReportStore
-from app.services.planning_center import PlanningCenterClient
-from app.services.propresenter import ProPresenterClient
-from app.services.restream import RestreamClient
-from app.services.livekit import access_token as livekit_access_token
+from app.modules.runtime import RuntimeService
+from app.modules.spl_reports import SPLReportStore
+from app.modules.planning_center import PlanningCenterClient
+from app.modules.propresenter import ProPresenterClient
+from app.modules.restream import RestreamClient
+from app.modules.livekit import access_token as livekit_access_token
+from app.modules.prodmesh_rta import ProdMeshRTAClient
+from app.modules.thelightingcontroller import TheLightingControllerClient
 from app.store import ConfigStore
 from app.update import download_update, update_status
 from app.version import __version__
@@ -76,6 +78,13 @@ class ProPresenterSlideTrigger(BaseModel):
 
 
 class ProPresenterNavigationRequest(BaseModel):
+    dashboard_slug: str | None = None
+    widget_id: str | None = None
+
+
+class LightingButtonTrigger(BaseModel):
+    name: str
+    mode: str = "toggle"
     dashboard_slug: str | None = None
     widget_id: str | None = None
 
@@ -549,6 +558,8 @@ async def update_settings(payload: SettingsUpdate, request: Request) -> dict:
             settings.setdefault("restream", {})[secret_name] = existing_restream.get(secret_name, "")
     if not settings.get("obs", {}).get("password"):
         settings.setdefault("obs", {})["password"] = data["settings"].get("obs", {}).get("password", "")
+    if not settings.get("lighting", {}).get("password"):
+        settings.setdefault("lighting", {})["password"] = data["settings"].get("lighting", {}).get("password", "")
     intercom = settings.setdefault("intercom", {})
     existing_intercom = data["settings"].get("intercom", {})
     if intercom.get("enabled"):
@@ -1014,6 +1025,7 @@ async def get_runtime(request: Request, compact: bool = False) -> dict:
             "planning_center_live",
             "service_control",
             "osm",
+            "prodmesh_rta",
             "restream",
             "livestreams",
             "obs",
@@ -1025,6 +1037,39 @@ async def get_runtime(request: Request, compact: bool = False) -> dict:
     if request.headers.get("if-none-match") == etag:
         return Response(status_code=304, headers={"ETag": etag})
     return Response(encoded, media_type="application/json", headers={"ETag": etag})
+
+
+@app.post("/api/integrations/prodmesh-rta/test")
+async def test_prodmesh_rta(request: Request) -> dict:
+    require_role(request, "admin", "editor")
+    client = ProdMeshRTAClient(store_from(request).load()["settings"].get("prodmesh_rta", {}))
+    try:
+        if not client.configured: raise HTTPException(400, "Enable ProdMesh Remote RTA and save its address first")
+        levels = await client.levels()
+        value = levels.get("fast_db")
+        return {"connected": True, "message": f"ProdMesh RTA connected · {float(value):.1f} dB" if value is not None else "ProdMesh RTA connected"}
+    except HTTPException: raise
+    except Exception as exc: raise HTTPException(502, f"Could not connect to ProdMesh RTA: {exc}") from exc
+    finally: await client.close()
+
+
+@app.get("/api/integrations/lighting/buttons")
+async def lighting_buttons(request: Request) -> dict:
+    client = TheLightingControllerClient(store_from(request).load()["settings"].get("lighting", {}))
+    if not client.configured: raise HTTPException(400, "Enable lighting control and save its computer address first")
+    try: return {"items": await client.buttons()}
+    except Exception as exc: raise HTTPException(502, f"Could not read lighting controls: {exc}") from exc
+
+
+@app.post("/api/integrations/lighting/button")
+async def lighting_trigger_button(payload: LightingButtonTrigger, request: Request) -> dict:
+    dashboard = dashboard_or_404(store_from(request), payload.dashboard_slug or "")
+    widget = next((item for item in dashboard.get("widgets", []) if item.get("id") == payload.widget_id and item.get("type") == "lighting"), None)
+    if not widget: raise HTTPException(403, "Lighting must be controlled from a Lighting controls widget")
+    client = TheLightingControllerClient(store_from(request).load()["settings"].get("lighting", {}))
+    if not client.configured: raise HTTPException(400, "Lighting control is not connected")
+    try: await client.trigger_button(payload.name, payload.mode); return {"ok": True}
+    except Exception as exc: raise HTTPException(502, f"Could not trigger lighting button: {exc}") from exc
 
 
 @app.post("/api/integrations/osm/measurement", status_code=202)

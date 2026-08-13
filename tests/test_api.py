@@ -290,6 +290,9 @@ class ApiTests(unittest.TestCase):
         display_script = self.client.get("/static/display.js").text
         self.assertIn("data-pp-keyboard-toggle", self.client.get("/static/common.js").text)
         self.assertIn("data-pp-controls-toggle", self.client.get("/static/common.js").text)
+        self.assertIn('data-pp-trigger="${slideNumber}"', self.client.get("/static/common.js").text)
+        self.assertNotIn('data-pp-trigger="${slideNumber-1}"', self.client.get("/static/common.js").text)
+        self.assertNotIn('<span>${escapeHtml(source)}</span>', self.client.get("/static/common.js").text)
         self.assertIn('class="pp-switch-track"', self.client.get("/static/common.js").text)
         self.assertIn('role="switch"', self.client.get("/static/common.js").text)
         self.assertIn("/api/integrations/propresenter/navigate/", display_script)

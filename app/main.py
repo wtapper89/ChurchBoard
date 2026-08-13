@@ -1481,7 +1481,7 @@ async def propresenter_trigger_active_slide(payload: ProPresenterSlideTrigger, r
         raise HTTPException(502, f"Could not trigger the ProPresenter slide: {exc}") from exc
     finally:
         await client.close()
-    return {"ok": True, "index": payload.index + 1}
+    return {"ok": True, "index": payload.index}
 
 
 @app.post("/api/integrations/propresenter/navigate/{direction}")

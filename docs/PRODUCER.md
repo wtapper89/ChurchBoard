@@ -1,6 +1,12 @@
 # Producer workspace
 
-ChurchBoard 1.4 evolves the display system into a service-production workspace while retaining the existing local, no-login behavior until an owner account is created.
+ChurchBoard 1.5 beta extends the display system into a service-production workspace while retaining the existing local, no-login behavior until an owner account is created.
+
+ChurchBoard selects the current Planning Center service time automatically, not only the service plan. This matters when a position has a different person at an early, middle, or late service. Administrators and editors can override the time from the Producer service-time menu; returning it to **Automatic for current time** resumes time-based selection.
+
+The optional second listener defaults to port 80 and exposes only sign-in, the Producer workspace, checklists, locally mirrored resources, and their required APIs. It redirects attempts to open dashboards or Setup. Configure a different port such as 8080 when the operating system reserves port 80. Restart ChurchBoard after changing listener settings.
+
+Planning Center tagged resources are downloaded by ChurchBoard during a successful tag refresh. Volunteers open the local copy and are not sent to a Planning Center login. When a later complete refresh confirms that a media item is no longer tagged, ChurchBoard removes its cached local copy. A failed or incomplete Planning Center refresh never triggers that cleanup.
 
 ## Start Producer
 
@@ -24,6 +30,8 @@ For volunteers, choose their name from the **Planning Center person** list or us
 
 The active service chooser at the top of Producer lists all plans currently returned by the configured Planning Center service types. Select a dated plan to lock ChurchBoard to it, or choose **Automatic service selection** to use the configured open/close timing window.
 
+Admins and editors also have an **Audio history** tab. When ProdMesh RTA or Open Sound Meter reporting is enabled, ChurchBoard stores readings locally and groups them by Planning Center service time and active item. This keeps separate services separate even when they share the same plan. The tab shows a graph and minimum, average, and maximum for every song or item, with downloadable graph and CSV copies.
+
 Checklist templates use the position keys returned by the configured Planning Center Services plan. A template can therefore follow whoever is scheduled as `Band · Vox 1`, `Production · Audio`, or another selected position instead of being tied permanently to one person.
 
 ## Position checklists and resources
@@ -41,6 +49,8 @@ The Personal Access Token user must be able to read Services Media and its tags.
 Use **Export layouts** from the desktop control page to back up all dashboards, or export the open layout from its editor. **Import layout** validates the file before storing it; a conflicting slug or name is preserved by assigning the imported dashboard a new one. Treat exports as configuration files and review operational details before sharing them.
 
 The editor palette groups widgets into Service & timing, Planning Center, ProPresenter, Audio & streaming, and Content. Search filters the list. Click the always-visible **Edit** button in a widget's upper-right corner or right-click it to open settings in a modal; the old permanent right sidebar has been removed. Drag a widget to move it, or drag its blue right edge, bottom edge, or corner to resize it. Size choices use useful labels such as compact, comfortable, and large where practical instead of raw pixels.
+
+Every displayed board has a one-click **Edit** button beside the fullscreen and menu controls. The **Board navigation** widget adds touch-friendly links to all boards directly inside a layout, which is useful for operator pages and tablets.
 
 ## HTTPS
 
@@ -64,4 +74,4 @@ On the same trusted network, open `https://churchboard-hostname:8040/producer` f
 
 ## Current scope
 
-ChurchBoard 1.4 uses local accounts and local resource storage. Invitation email, password-reset email, SSO, directory synchronization, aggregate reporting, and cloud storage are not included. Back up the ChurchBoard data directory and export layouts regularly.
+ChurchBoard 1.5 beta uses local accounts and local resource storage. Invitation email, password-reset email, SSO, directory synchronization, aggregate reporting, and cloud storage are not included. Back up the ChurchBoard data directory and export layouts regularly.

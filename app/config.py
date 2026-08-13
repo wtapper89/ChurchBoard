@@ -22,6 +22,8 @@ class AppConfig:
     data_file: Path
     ssl_certfile: Path | None = None
     ssl_keyfile: Path | None = None
+    producer_port: int = 80
+    producer_port_enabled: bool = True
 
     @property
     def scheme(self) -> str:
@@ -47,4 +49,6 @@ def load_config() -> AppConfig:
         data_file=data_file,
         ssl_certfile=Path(cert).expanduser() if cert else None,
         ssl_keyfile=Path(key).expanduser() if key else None,
+        producer_port=int(os.getenv("CHURCHBOARD_PRODUCER_PORT", str(saved.get("producer_port") or 80))),
+        producer_port_enabled=str(os.getenv("CHURCHBOARD_PRODUCER_PORT_ENABLED", str(saved.get("producer_port_enabled", True)))).casefold() not in {"0", "false", "no", "off"},
     )

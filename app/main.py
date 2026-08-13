@@ -5,6 +5,7 @@ from copy import deepcopy
 from datetime import datetime, timezone
 from hashlib import sha256
 import ipaddress
+import asyncio
 import json
 import re
 import secrets
@@ -15,7 +16,8 @@ from zoneinfo import available_timezones
 
 import uvicorn
 import httpx
-from fastapi import FastAPI, HTTPException, Request
+import websockets
+from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
@@ -23,12 +25,16 @@ from pydantic import BaseModel, Field
 from app.config import ROOT_DIR, load_config
 from app.auth import AuthManager, password_hash, public_user, require_role, require_user
 from app.models import Dashboard, SettingsUpdate
+from app.modules import ModuleRegistry
 from app.producer import add_activity, producer_context, save_resource, save_template, set_completion
-from app.services.runtime import RuntimeService
-from app.services.spl_reports import SPLReportStore
-from app.services.planning_center import PlanningCenterClient
-from app.services.propresenter import ProPresenterClient
-from app.services.restream import RestreamClient
+from app.modules.runtime import RuntimeService
+from app.modules.spl_reports import SPLReportStore
+from app.modules.planning_center import PlanningCenterClient
+from app.modules.propresenter import ProPresenterClient
+from app.modules.restream import RestreamClient
+from app.modules.livekit import access_token as livekit_access_token
+from app.modules.prodmesh_rta import ProdMeshRTAClient
+from app.modules.thelightingcontroller import TheLightingControllerClient
 from app.store import ConfigStore
 from app.update import download_update, update_status
 from app.version import __version__
@@ -37,6 +43,11 @@ from app.version import __version__
 class ActivePlanRequest(BaseModel):
     id: str | None = None
     service_type_id: str | None = None
+
+
+class ActiveServiceTimeRequest(BaseModel):
+    id: str | None = None
+    plan_id: str | None = None
 
 
 class OSMMeasurement(BaseModel):
@@ -67,6 +78,13 @@ class ProPresenterSlideTrigger(BaseModel):
 
 
 class ProPresenterNavigationRequest(BaseModel):
+    dashboard_slug: str | None = None
+    widget_id: str | None = None
+
+
+class LightingButtonTrigger(BaseModel):
+    name: str
+    mode: str = "toggle"
     dashboard_slug: str | None = None
     widget_id: str | None = None
 
@@ -107,14 +125,23 @@ class ProducerPayload(BaseModel):
     data: dict = Field(default_factory=dict)
 
 
+class ModulePolicyRequest(BaseModel):
+    auto_update: bool = True
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     config = load_config()
     store = ConfigStore(config.data_file)
+    modules = ModuleRegistry()
+    module_data = store.load()
+    if modules.reconcile(module_data):
+        store.save(module_data)
     runtime = RuntimeService(store, SPLReportStore(config.data_file.with_name("spl-samples.jsonl")))
     app.state.instance_id = uuid4().hex
     app.state.store = store
     app.state.auth = AuthManager(store)
+    app.state.modules = modules
     app.state.runtime = runtime
     await runtime.start()
     try:
@@ -127,12 +154,96 @@ app = FastAPI(title="ChurchBoard", version=__version__, lifespan=lifespan)
 app.mount("/static", StaticFiles(directory=ROOT_DIR / "app" / "static"), name="static")
 
 
+class ProducerPortalApp:
+    """Mark requests arriving on the volunteer-only listener."""
+
+    def __init__(self, wrapped: FastAPI):
+        self.wrapped = wrapped
+
+    async def __call__(self, scope, receive, send):
+        if scope.get("type") in {"http", "websocket"}:
+            scope = {**scope, "churchboard_producer_portal": True}
+        await self.wrapped(scope, receive, send)
+
+
+producer_portal_app = ProducerPortalApp(app)
+
+
+@app.websocket("/rtc")
+@app.websocket("/rtc/{subpath:path}")
+async def hosted_intercom_websocket(websocket: WebSocket, subpath: str = "") -> None:
+    """Proxy LiveKit signaling through ChurchBoard's existing HTTP/HTTPS listener."""
+    runtime = getattr(websocket.app.state, "runtime", None)
+    status = runtime.intercom.status() if runtime is not None else {"ready": False}
+    if not status.get("ready"):
+        await websocket.close(code=1013, reason="ChurchBoard intercom is not ready")
+        return
+    query = websocket.scope.get("query_string", b"").decode("ascii", "ignore")
+    suffix = f"/{subpath}" if subpath else ""
+    target = f"ws://127.0.0.1:{status['signal_port']}/rtc{suffix}{('?' + query) if query else ''}"
+    offered = [value.strip() for value in str(websocket.headers.get("sec-websocket-protocol") or "").split(",") if value.strip()]
+    try:
+        async with websockets.connect(target, subprotocols=offered or None, max_size=None, compression=None) as upstream:
+            await websocket.accept(subprotocol=upstream.subprotocol)
+
+            async def browser_to_intercom() -> None:
+                while True:
+                    message = await websocket.receive()
+                    if message["type"] == "websocket.disconnect":
+                        return
+                    if message.get("bytes") is not None:
+                        await upstream.send(message["bytes"])
+                    elif message.get("text") is not None:
+                        await upstream.send(message["text"])
+
+            async def intercom_to_browser() -> None:
+                async for message in upstream:
+                    if isinstance(message, bytes):
+                        await websocket.send_bytes(message)
+                    else:
+                        await websocket.send_text(message)
+
+            tasks = [asyncio.create_task(browser_to_intercom()), asyncio.create_task(intercom_to_browser())]
+            done, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
+            for task in pending:
+                task.cancel()
+            await asyncio.gather(*pending, return_exceptions=True)
+            for task in done:
+                task.result()
+    except (OSError, WebSocketDisconnect, websockets.ConnectionClosed):
+        try:
+            await websocket.close(code=1011)
+        except RuntimeError:
+            pass
+
+
 @app.middleware("http")
 async def prevent_stale_dashboard_assets(request: Request, call_next):
+    portal_only = bool(request.scope.get("churchboard_producer_portal"))
+    request.state.portal_only = portal_only
+    if portal_only:
+        path = request.url.path
+        if path == "/":
+            return RedirectResponse("/producer", status_code=303)
+        allowed_page = path in {"/login", "/producer"} or path.startswith("/static/")
+        allowed_api = (
+            path.startswith(("/api/auth/", "/api/producer/", "/api/users", "/api/campuses", "/api/reports/"))
+            or path in {
+                "/api/app-info", "/api/organization/auth", "/api/active-plan",
+                "/api/active-service-time", "/api/runtime/refresh",
+                "/api/integrations/planning-center/catalog",
+                "/api/integrations/planning-center/media-tags",
+                "/api/integrations/planning-center/people",
+            }
+        )
+        if not allowed_page and not allowed_api:
+            if path.startswith("/api/"):
+                return JSONResponse({"detail": "This listener is limited to the ChurchBoard production workspace"}, status_code=404)
+            return RedirectResponse("/producer", status_code=303)
     auth = getattr(request.app.state, "auth", None)
     if auth is not None:
         request.state.user = auth.current_user(request)
-        protected_page = request.url.path in {"/admin", "/producer"} or request.url.path.startswith("/editor/")
+        protected_page = request.url.path in {"/admin", "/modules", "/producer"} or request.url.path.startswith("/editor/")
         if request.url.path == "/producer" and not store_from(request).load().get("users"):
             return RedirectResponse("/login?next=/producer", status_code=303)
         if protected_page and auth.enabled() and not request.state.user:
@@ -142,7 +253,7 @@ async def prevent_stale_dashboard_assets(request: Request, call_next):
     response.headers["Referrer-Policy"] = "same-origin"
     if request.url.scheme == "https" or request.headers.get("x-forwarded-proto") == "https":
         response.headers["Strict-Transport-Security"] = "max-age=31536000"
-    if request.url.path.startswith(("/static/", "/api/producer/", "/api/users", "/api/campuses")) or request.url.path in {"/admin", "/desktop", "/producer"} or request.url.path.startswith(("/display/", "/editor/")):
+    if request.url.path.startswith(("/static/", "/api/producer/", "/api/users", "/api/campuses")) or request.url.path in {"/admin", "/modules", "/desktop", "/producer"} or request.url.path.startswith(("/display/", "/editor/")):
         response.headers["Cache-Control"] = "no-store"
     return response
 
@@ -208,8 +319,14 @@ async def producer_page() -> FileResponse:
 
 
 @app.get("/admin")
-async def admin_page() -> FileResponse:
-    return FileResponse(ROOT_DIR / "app" / "static" / "admin.html")
+async def admin_page() -> RedirectResponse:
+    """Keep old bookmarks working while Setup lives in Module Management."""
+    return RedirectResponse("/modules", status_code=307)
+
+
+@app.get("/modules")
+async def modules_page() -> FileResponse:
+    return FileResponse(ROOT_DIR / "app" / "static" / "modules.html")
 
 
 @app.get("/display/{slug}")
@@ -227,6 +344,89 @@ async def list_dashboards(request: Request) -> dict:
     return {"items": store_from(request).load()["dashboards"]}
 
 
+@app.get("/api/modules/frontend")
+async def module_frontend_catalog(request: Request) -> dict:
+    store = store_from(request)
+    data = store.load()
+    modules: ModuleRegistry = request.app.state.modules
+    changed = modules.reconcile(data)
+    if changed:
+        store.save(data)
+    return modules.public_frontend(data)
+
+
+@app.get("/api/modules")
+async def module_catalog(request: Request) -> dict:
+    require_role(request, "admin")
+    store = store_from(request)
+    data = store.load()
+    modules: ModuleRegistry = request.app.state.modules
+    changed = modules.reconcile(data)
+    if changed:
+        store.save(data)
+    return {"items": modules.catalog(data)}
+
+
+@app.post("/api/modules/{module_id}/install")
+async def install_module(module_id: str, request: Request) -> dict:
+    require_role(request, "admin")
+    store = store_from(request)
+    data = store.load()
+    modules: ModuleRegistry = request.app.state.modules
+    try:
+        added = modules.install(data, module_id)
+    except KeyError:
+        raise HTTPException(404, "Module not found")
+    store.save(data)
+    return {"installed": added, "items": modules.catalog(data)}
+
+
+@app.post("/api/modules/{module_id}/update")
+async def update_module(module_id: str, request: Request) -> dict:
+    require_role(request, "admin")
+    store = store_from(request)
+    data = store.load()
+    modules: ModuleRegistry = request.app.state.modules
+    try:
+        modules.update(data, module_id)
+    except KeyError:
+        raise HTTPException(404, "Module not found")
+    store.save(data)
+    return {"items": modules.catalog(data)}
+
+
+@app.put("/api/modules/{module_id}/policy")
+async def update_module_policy(module_id: str, payload: ModulePolicyRequest, request: Request) -> dict:
+    require_role(request, "admin")
+    store = store_from(request)
+    data = store.load()
+    modules: ModuleRegistry = request.app.state.modules
+    try:
+        modules.set_auto_update(data, module_id, payload.auto_update)
+    except KeyError:
+        raise HTTPException(404, "Module not found")
+    except ValueError as exc:
+        raise HTTPException(400, str(exc))
+    store.save(data)
+    return {"items": modules.catalog(data)}
+
+
+@app.delete("/api/modules/{module_id}", status_code=204)
+async def uninstall_module(module_id: str, request: Request) -> None:
+    require_role(request, "admin")
+    store = store_from(request)
+    data = store.load()
+    modules: ModuleRegistry = request.app.state.modules
+    try:
+        modules.uninstall(data, module_id)
+    except KeyError:
+        raise HTTPException(404, "Module not found")
+    except ValueError as exc:
+        raise HTTPException(400, str(exc))
+    store.save(data)
+    await request.app.state.runtime.refresh(force=True)
+
+
 @app.get("/api/dashboards/{identifier}")
 async def get_dashboard(identifier: str, request: Request) -> dict:
     return dashboard_or_404(store_from(request), identifier)
@@ -240,6 +440,7 @@ async def create_dashboard(payload: Dashboard, request: Request) -> dict:
     if any(item["id"] == payload.id or item["slug"] == payload.slug for item in data["dashboards"]):
         raise HTTPException(409, "Dashboard ID and URL must be unique")
     dashboard = persist_livestream_secrets(data, payload.model_dump())
+    request.app.state.modules.install_for_widget_types(data, {widget["type"] for widget in dashboard.get("widgets", [])})
     data["dashboards"].append(dashboard)
     store.save(data)
     return dashboard
@@ -257,6 +458,7 @@ async def update_dashboard(identifier: str, payload: Dashboard, request: Request
         raise HTTPException(409, "Dashboard ID and URL must be unique")
     previous_id = str(data["dashboards"][index].get("id") or "")
     data["dashboards"][index] = persist_livestream_secrets(data, payload.model_dump(), previous_id)
+    request.app.state.modules.install_for_widget_types(data, {widget["type"] for widget in data["dashboards"][index].get("widgets", [])})
     store.save(data)
     return data["dashboards"][index]
 
@@ -283,7 +485,41 @@ async def delete_dashboard(identifier: str, request: Request) -> None:
 @app.get("/api/settings")
 async def get_settings(request: Request) -> dict:
     require_role(request, "admin")
-    return store_from(request).public_settings()
+    settings = store_from(request).public_settings()
+    prodmesh_settings = settings.get("prodmesh_rta", {})
+    settings["prodmesh_rta"]["engine_status"] = request.app.state.runtime.prodmesh_host.status(prodmesh_settings)
+    intercom = request.app.state.runtime.intercom.status()
+    settings["intercom"]["server_ports"] = {
+        "signal": intercom.get("signal_port"),
+        "tcp": intercom.get("tcp_port"),
+        "udp": intercom.get("udp_port"),
+    }
+    if intercom.get("ready"):
+        settings["intercom"]["server_status"] = (
+            f"Hosted intercom server is ready · signaling {intercom.get('signal_port')} · "
+            f"TCP {intercom.get('tcp_port')} · UDP {intercom.get('udp_port')}"
+        )
+    elif settings["intercom"].get("enabled"):
+        settings["intercom"]["server_status"] = intercom.get("error") or "Hosted intercom server is starting…"
+    return settings
+
+
+@app.post("/api/settings/https/setup")
+async def setup_local_https(request: Request) -> dict:
+    """Generate and trust a local certificate without exposing key paths in the UI."""
+    require_role(request, "admin")
+    from app.certificates import install_macos_https
+
+    store = store_from(request)
+    try:
+        result = await asyncio.to_thread(install_macos_https, store.path)
+    except RuntimeError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    return {
+        "message": "HTTPS is ready. Quit and reopen ChurchBoard to apply it.",
+        "settings": store.public_settings(),
+        "certificate": result["certificate"],
+    }
 
 
 @app.put("/api/settings")
@@ -300,6 +536,15 @@ async def update_settings(payload: SettingsUpdate, request: Request) -> dict:
     if not 1 <= port <= 65535:
         raise HTTPException(400, "Web server port must be between 1 and 65535")
     server["port"] = port
+    try:
+        producer_port = int(server.get("producer_port") or 80)
+    except (TypeError, ValueError):
+        raise HTTPException(400, "Producer workspace port must be a number")
+    if not 1 <= producer_port <= 65535:
+        raise HTTPException(400, "Producer workspace port must be between 1 and 65535")
+    if server.get("producer_port_enabled", True) and producer_port == port:
+        raise HTTPException(400, "The dashboard and producer workspace must use different ports")
+    server["producer_port"] = producer_port
     if server.get("https_enabled") and not (str(server.get("ssl_certfile") or "").strip() and str(server.get("ssl_keyfile") or "").strip()):
         raise HTTPException(400, "Choose both a TLS certificate and private key to enable HTTPS")
     if server.get("https_enabled"):
@@ -315,6 +560,33 @@ async def update_settings(payload: SettingsUpdate, request: Request) -> dict:
             settings.setdefault("restream", {})[secret_name] = existing_restream.get(secret_name, "")
     if not settings.get("obs", {}).get("password"):
         settings.setdefault("obs", {})["password"] = data["settings"].get("obs", {}).get("password", "")
+    if not settings.get("lighting", {}).get("password"):
+        settings.setdefault("lighting", {})["password"] = data["settings"].get("lighting", {}).get("password", "")
+    intercom = settings.setdefault("intercom", {})
+    existing_intercom = data["settings"].get("intercom", {})
+    if intercom.get("enabled"):
+        intercom["api_key"] = str(existing_intercom.get("api_key") or f"churchboard-{secrets.token_hex(8)}")
+        existing_intercom_secret = str(existing_intercom.get("api_secret") or "")
+        intercom["api_secret"] = existing_intercom_secret if len(existing_intercom_secret) >= 32 else secrets.token_urlsafe(36)
+    else:
+        intercom["api_key"] = str(existing_intercom.get("api_key") or "")
+        intercom["api_secret"] = str(existing_intercom.get("api_secret") or "")
+    party_lines = []
+    used_party_line_ids = set()
+    for raw in intercom.get("party_lines") or []:
+        if not isinstance(raw, dict):
+            continue
+        name = str(raw.get("name") or "").strip()[:80]
+        identifier = re.sub(r"[^a-z0-9]+", "-", str(raw.get("id") or name).casefold()).strip("-")[:60]
+        if not name or not identifier or identifier in used_party_line_ids:
+            continue
+        used_party_line_ids.add(identifier)
+        party_lines.append({"id": identifier, "name": name})
+        if len(party_lines) >= 12:
+            break
+    intercom["hosted"] = True
+    intercom["url"] = ""
+    intercom["party_lines"] = party_lines or [{"id": "production", "name": "Production"}]
     data["settings"] = settings
     store.save(data)
     await request.app.state.runtime.refresh(force=True)
@@ -518,9 +790,48 @@ async def get_producer_context(request: Request) -> dict:
     return producer_context(store_from(request), request.app.state.runtime.state, require_user(request))
 
 
+@app.get("/api/producer/intercom")
+async def get_intercom_configuration(request: Request) -> dict:
+    require_user(request)
+    settings = store_from(request).load()["settings"].get("intercom", {})
+    status = request.app.state.runtime.intercom.status()
+    return {
+        "enabled": bool(settings.get("enabled")),
+        "party_lines": settings.get("party_lines") or [{"id": "production", "name": "Production"}],
+        "server": status,
+    }
+
+
+@app.post("/api/producer/intercom/token")
+async def create_intercom_token(payload: ProducerPayload, request: Request) -> dict:
+    user = require_user(request)
+    settings = store_from(request).load()["settings"].get("intercom", {})
+    if not settings.get("enabled"):
+        raise HTTPException(409, "The intercom is not enabled")
+    party_lines = settings.get("party_lines") or [{"id": "production", "name": "Production"}]
+    party_line_id = str(payload.data.get("party_line_id") or "production")
+    party_line = next((row for row in party_lines if str(row.get("id") or "") == party_line_id), None)
+    if not party_line:
+        raise HTTPException(404, "Party line not found")
+    api_key, api_secret = str(settings.get("api_key") or ""), str(settings.get("api_secret") or "")
+    status = request.app.state.runtime.intercom.status()
+    if not (api_key and api_secret):
+        raise HTTPException(409, "ChurchBoard has not generated the hosted intercom credentials")
+    if not status.get("ready"):
+        raise HTTPException(503, status.get("error") or "The hosted intercom server is still starting")
+    scheme = "wss" if request.url.scheme == "https" else "ws"
+    url = f"{scheme}://{request.headers.get('host') or request.url.netloc}"
+    room = f"churchboard-{party_line_id}"
+    token = livekit_access_token(
+        api_key, api_secret, f"churchboard-{user['id']}-{uuid4().hex[:8]}", str(user.get("name") or "ChurchBoard user"),
+        room, {"role": user.get("role"), "user_id": user.get("id"), "party_line_id": party_line_id},
+    )
+    return {"url": url, "token": token, "room": room, "party_line": party_line}
+
+
 @app.get("/api/producer/planning-center-media/{media_id}/content")
 async def view_planning_center_media(media_id: str, request: Request) -> Response:
-    """Proxy a resource visible to this producer so it opens inside ChurchBoard."""
+    """Serve an authorized resource from ChurchBoard's local PCO mirror."""
     user = require_user(request)
     context = producer_context(store_from(request), request.app.state.runtime.state, user)
     visible_tag_ids = {str(rule.get("tag_id") or "") for rule in context.get("media_tag_rules") or []}
@@ -530,20 +841,20 @@ async def view_planning_center_media(media_id: str, request: Request) -> Respons
         for item in (context.get("tagged_resources") or {}).get(tag_id, [])
         if str(item.get("id") or "") == media_id
     ), None)
-    if not resource or not str(resource.get("url") or "").startswith(("https://", "http://")):
+    if not resource:
         raise HTTPException(404, "Planning Center resource not found")
-    try:
-        async with httpx.AsyncClient(timeout=20, follow_redirects=True) as client:
-            upstream = await client.get(str(resource["url"]))
-            upstream.raise_for_status()
-    except Exception as exc:
-        raise HTTPException(502, f"Could not open the Planning Center resource: {exc}") from exc
-    filename = re.sub(r"[^A-Za-z0-9._-]+", "-", Path(str(resource.get("filename") or resource.get("title") or "resource")).name)[:160]
-    content_type = upstream.headers.get("content-type") or resource.get("content_type") or "application/octet-stream"
-    return Response(upstream.content, media_type=str(content_type).split(";")[0], headers={
-        "Content-Disposition": f'inline; filename="{filename or "resource"}"',
-        "Cache-Control": "private, max-age=300",
-    })
+    cached = request.app.state.runtime.media_cache.file_for(media_id)
+    if not cached:
+        raise HTTPException(404, "This resource has not finished downloading to ChurchBoard")
+    path, metadata = cached
+    filename = re.sub(r"[^A-Za-z0-9._-]+", "-", Path(str(metadata.get("display_name") or path.name)).name)[:160]
+    return FileResponse(
+        path,
+        media_type=str(metadata.get("content_type") or resource.get("content_type") or "application/octet-stream"),
+        filename=filename or "resource",
+        content_disposition_type="inline",
+        headers={"Cache-Control": "private, max-age=3600"},
+    )
 
 
 @app.get("/api/producer/plans")
@@ -686,6 +997,7 @@ async def import_dashboards(request: Request) -> dict:
             number += 1
         if candidate["slug"] != original_slug:
             candidate["name"] = f"{candidate['name']} (imported)"
+        request.app.state.modules.install_for_widget_types(data, {widget["type"] for widget in candidate.get("widgets", [])})
         data["dashboards"].append(candidate)
         imported.append(candidate)
     store_from(request).save(data)
@@ -715,6 +1027,7 @@ async def get_runtime(request: Request, compact: bool = False) -> dict:
             "planning_center_live",
             "service_control",
             "osm",
+            "prodmesh_rta",
             "restream",
             "livestreams",
             "obs",
@@ -726,6 +1039,105 @@ async def get_runtime(request: Request, compact: bool = False) -> dict:
     if request.headers.get("if-none-match") == etag:
         return Response(status_code=304, headers={"ETag": etag})
     return Response(encoded, media_type="application/json", headers={"ETag": etag})
+
+
+@app.post("/api/integrations/prodmesh-rta/test")
+async def test_prodmesh_rta(request: Request) -> dict:
+    require_role(request, "admin", "editor")
+    settings = store_from(request).load()["settings"].get("prodmesh_rta", {})
+    if str(settings.get("mode") or "embedded") == "embedded":
+        await asyncio.to_thread(request.app.state.runtime.prodmesh_host.configure, settings)
+        settings = {**settings, "host": "127.0.0.1"}
+        await asyncio.sleep(.35)
+    client = ProdMeshRTAClient(settings)
+    try:
+        if not client.configured: raise HTTPException(400, "Enable ProdMesh Remote RTA and save its address first")
+        levels = None
+        last_error = None
+        for _ in range(20 if str(settings.get("mode") or "embedded") == "embedded" else 1):
+            try:
+                levels = await client.levels()
+                break
+            except Exception as exc:
+                last_error = exc
+                await asyncio.sleep(.25)
+        if levels is None:
+            raise last_error or RuntimeError("The analyzer did not become ready")
+        value = levels.get("fast_db")
+        return {"connected": True, "message": f"ProdMesh RTA connected · {float(value):.1f} dB" if value is not None else "ProdMesh RTA connected"}
+    except HTTPException: raise
+    except Exception as exc: raise HTTPException(502, f"Could not connect to ProdMesh RTA: {exc}") from exc
+    finally: await client.close()
+
+
+@app.websocket("/api/integrations/prodmesh-rta/stream")
+async def prodmesh_rta_stream(websocket: WebSocket) -> None:
+    """Relay ProdMesh's native pushed frames to ChurchBoard browser widgets."""
+    await websocket.accept()
+    sequence = 0
+    active_client = None
+    try:
+        while True:
+            client = websocket.app.state.runtime._prodmesh_client
+            if client is None or not client.configured:
+                await websocket.send_json({"connected": False, "error": "ProdMesh RTA is not enabled", "transport": "websocket"})
+                await asyncio.sleep(1)
+                continue
+            if client is not active_client:
+                active_client = client
+                sequence = 0
+            sequence, frame = await client.wait_for_frame(sequence)
+            await websocket.send_json(frame)
+    except (WebSocketDisconnect, websockets.ConnectionClosed, RuntimeError):
+        return
+
+
+@app.get("/api/integrations/prodmesh-rta/status")
+async def prodmesh_rta_status(request: Request) -> dict:
+    require_role(request, "admin", "editor")
+    settings = store_from(request).load()["settings"].get("prodmesh_rta", {})
+    return request.app.state.runtime.prodmesh_host.status(settings)
+
+
+@app.post("/api/integrations/prodmesh-rta/open")
+async def open_prodmesh_rta(request: Request) -> dict:
+    require_role(request, "admin", "editor")
+    settings = store_from(request).load()["settings"].get("prodmesh_rta", {})
+    if str(settings.get("mode") or "embedded") != "embedded":
+        raise HTTPException(400, "The native audio settings belong to the remote ProdMesh computer")
+    result = await asyncio.to_thread(request.app.state.runtime.prodmesh_host.open, settings)
+    if not result.get("available"):
+        raise HTTPException(503, result.get("error") or "The embedded ProdMesh engine is unavailable")
+    return {**result, "message": "ProdMesh audio and calibration settings are open"}
+
+
+@app.post("/api/integrations/prodmesh-rta/restart")
+async def restart_prodmesh_rta(request: Request) -> dict:
+    require_role(request, "admin", "editor")
+    settings = store_from(request).load()["settings"].get("prodmesh_rta", {})
+    result = await asyncio.to_thread(request.app.state.runtime.prodmesh_host.restart, settings)
+    if result.get("embedded") and not result.get("running"):
+        raise HTTPException(503, result.get("error") or "The embedded ProdMesh engine did not start")
+    return {**result, "message": "Embedded ProdMesh RTA restarted"}
+
+
+@app.get("/api/integrations/lighting/buttons")
+async def lighting_buttons(request: Request) -> dict:
+    client = TheLightingControllerClient(store_from(request).load()["settings"].get("lighting", {}))
+    if not client.configured: raise HTTPException(400, "Enable lighting control and save its computer address first")
+    try: return {"items": await client.buttons()}
+    except Exception as exc: raise HTTPException(502, f"Could not read lighting controls: {exc}") from exc
+
+
+@app.post("/api/integrations/lighting/button")
+async def lighting_trigger_button(payload: LightingButtonTrigger, request: Request) -> dict:
+    dashboard = dashboard_or_404(store_from(request), payload.dashboard_slug or "")
+    widget = next((item for item in dashboard.get("widgets", []) if item.get("id") == payload.widget_id and item.get("type") == "lighting"), None)
+    if not widget: raise HTTPException(403, "Lighting must be controlled from a Lighting controls widget")
+    client = TheLightingControllerClient(store_from(request).load()["settings"].get("lighting", {}))
+    if not client.configured: raise HTTPException(400, "Lighting control is not connected")
+    try: await client.trigger_button(payload.name, payload.mode); return {"ok": True}
+    except Exception as exc: raise HTTPException(502, f"Could not trigger lighting button: {exc}") from exc
 
 
 @app.post("/api/integrations/osm/measurement", status_code=202)
@@ -755,19 +1167,48 @@ async def test_osm_connection(request: Request) -> dict:
     return {"connected": False, "message": "No recent valid OSM level packet. Confirm OSM Remote API Server and multicast network access."}
 
 
+@app.get("/api/integrations/ndi/sources")
+async def list_ndi_sources(request: Request) -> dict:
+    require_role(request, "admin", "editor")
+    runtime = request.app.state.runtime.ndi
+    items = await asyncio.to_thread(runtime.sources, 650)
+    return {"items": items, **runtime.status()}
+
+
+@app.get("/api/integrations/ndi/snapshot")
+async def ndi_snapshot(source: str, request: Request) -> Response:
+    settings = store_from(request).load()["settings"].get("ndi", {})
+    if not settings.get("enabled"):
+        raise HTTPException(404, "NDI is not enabled")
+    try:
+        frame = await asyncio.to_thread(request.app.state.runtime.ndi.snapshot, source)
+    except RuntimeError as exc:
+        raise HTTPException(503, str(exc)) from exc
+    return Response(frame, media_type="image/jpeg", headers={"Cache-Control": "no-store"})
+
+
 @app.get("/api/reports/services")
 async def list_spl_report_services(request: Request) -> dict:
+    require_role(request, "admin", "editor")
     return {"items": request.app.state.runtime.spl_reports.services()}
+
+
+@app.get("/api/reports/services/{service_id}")
+async def get_audio_report(service_id: str, request: Request) -> dict:
+    require_role(request, "admin", "editor")
+    return request.app.state.runtime.spl_reports.report(service_id)
 
 
 @app.get("/api/reports/services/{service_id}/spl-averages.csv")
 async def download_spl_averages(service_id: str, request: Request) -> PlainTextResponse:
+    require_role(request, "admin", "editor")
     content = request.app.state.runtime.spl_reports.csv(service_id)
     return PlainTextResponse(content, media_type="text/csv", headers={"Content-Disposition": f'attachment; filename="churchboard-{service_id}-spl-averages.csv"'})
 
 
 @app.get("/api/reports/services/{service_id}/spl-graph.html")
 async def download_spl_graph(service_id: str, request: Request) -> Response:
+    require_role(request, "admin", "editor")
     content = request.app.state.runtime.spl_reports.graph_html(service_id)
     return Response(content, media_type="text/html", headers={"Content-Disposition": f'attachment; filename="churchboard-{service_id}-spl-graph.html"'})
 
@@ -779,6 +1220,7 @@ async def get_app_info(request: Request) -> dict:
         "version": request.app.version,
         "desktop_tray": bool(getattr(request.app.state, "desktop_tray", False)),
         "macos_launchservices": bool(getattr(request.app.state, "macos_launchservices", False)),
+        "producer_portal": bool(getattr(request.state, "portal_only", False)),
     }
 
 
@@ -837,6 +1279,24 @@ async def select_active_plan(payload: ActivePlanRequest, request: Request) -> di
     data["settings"]["manual_plan"] = (
         {"id": payload.id, "service_type_id": payload.service_type_id}
         if payload.id and payload.service_type_id
+        else None
+    )
+    data["settings"]["manual_service_time"] = None
+    store.save(data)
+    return await request.app.state.runtime.refresh(force=True)
+
+
+@app.put("/api/active-service-time")
+async def select_active_service_time(payload: ActiveServiceTimeRequest, request: Request) -> dict:
+    require_role(request, "admin", "editor")
+    store = store_from(request)
+    data = store.load()
+    active_plan_id = str((request.app.state.runtime.state.get("service") or {}).get("id") or "")
+    if payload.id and str(payload.plan_id or active_plan_id) != active_plan_id:
+        raise HTTPException(409, "That service time belongs to a different service")
+    data["settings"]["manual_service_time"] = (
+        {"id": str(payload.id), "plan_id": active_plan_id}
+        if payload.id and active_plan_id
         else None
     )
     store.save(data)
@@ -1021,7 +1481,7 @@ async def propresenter_trigger_active_slide(payload: ProPresenterSlideTrigger, r
         raise HTTPException(502, f"Could not trigger the ProPresenter slide: {exc}") from exc
     finally:
         await client.close()
-    return {"ok": True, "index": payload.index + 1}
+    return {"ok": True, "index": payload.index}
 
 
 @app.post("/api/integrations/propresenter/navigate/{direction}")
@@ -1108,4 +1568,26 @@ async def propresenter_trigger_active_playlist_item(payload: ProPresenterSlideTr
 
 def run() -> None:
     config = load_config()
-    uvicorn.run("app.main:app", host=config.host, port=config.port, reload=False, ssl_certfile=str(config.ssl_certfile) if config.ssl_certfile else None, ssl_keyfile=str(config.ssl_keyfile) if config.ssl_keyfile else None)
+    portal_server = None
+    if config.producer_port_enabled and config.producer_port != config.port:
+        portal_server = uvicorn.Server(uvicorn.Config(
+            producer_portal_app,
+            host=config.host,
+            port=config.producer_port,
+            reload=False,
+            lifespan="off",
+            ssl_certfile=str(config.ssl_certfile) if config.ssl_certfile else None,
+            ssl_keyfile=str(config.ssl_keyfile) if config.ssl_keyfile else None,
+        ))
+        def start_portal_when_ready() -> None:
+            for _ in range(200):
+                if hasattr(app.state, "runtime"):
+                    portal_server.run()
+                    return
+                threading.Event().wait(0.05)
+        threading.Thread(target=start_portal_when_ready, name="ChurchBoard producer portal", daemon=True).start()
+    try:
+        uvicorn.run(app, host=config.host, port=config.port, reload=False, ssl_certfile=str(config.ssl_certfile) if config.ssl_certfile else None, ssl_keyfile=str(config.ssl_keyfile) if config.ssl_keyfile else None)
+    finally:
+        if portal_server is not None:
+            portal_server.should_exit = True

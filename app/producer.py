@@ -42,7 +42,7 @@ def producer_context(store: ConfigStore, runtime: dict[str, Any], user: dict[str
     if user.get("role") == "volunteer":
         person_id = str(user.get("planning_center_person_id") or "")
         user_name = str(user.get("name") or "").casefold()
-        people = [person for person in people if (person_id and str(person.get("id") or "") == person_id) or str(person.get("name") or "").casefold() == user_name]
+        people = [person for person in people if (person_id and str(person.get("person_id") or person.get("id") or "") == person_id) or str(person.get("name") or "").casefold() == user_name]
     position_keys = {
         str(key)
         for person in people
@@ -72,6 +72,8 @@ def producer_context(store: ConfigStore, runtime: dict[str, Any], user: dict[str
         "service": service,
         "plans": runtime.get("plans") or [],
         "manual_plan": data.get("settings", {}).get("manual_plan"),
+        "manual_service_time": data.get("settings", {}).get("manual_service_time"),
+        "timing": runtime.get("timing") or {},
         "people": people,
         "templates": templates,
         "resources": resources,

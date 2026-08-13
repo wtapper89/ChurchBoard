@@ -1,10 +1,11 @@
-let dashboard,lastState={},serverInstance="",refreshInFlight=false,planOptionsKey="",planSelectionInFlight=false,lastFullRefresh=0,compactEtag="",ppKeyboardInFlight=false;
+let dashboard,lastState={},serverInstance="",refreshInFlight=false,planOptionsKey="",serviceTimeOptionsKey="",planSelectionInFlight=false,lastFullRefresh=0,compactEtag="",ppKeyboardInFlight=false,prodmeshSocket=null,prodmeshReconnectTimer=0;
 const widgetRenderKeys=new Map();
 const orderScrollPositions=new Map();
 const playlistScrollPositions=new Map();
 const playlistActiveKeys=new Map();
 const objectIds=new WeakMap();let nextObjectId=1;
 const slug=decodeURIComponent(location.pathname.split("/").pop());
+document.querySelector("#edit-board-button").href=`/editor/${encodeURIComponent(slug)}`;
 let dashboardFitFrame=0;
 function fitDashboardToViewport(){
   const root=document.querySelector("#dashboard");if(!root)return;
@@ -19,6 +20,8 @@ const triggerScope=element=>({dashboard_slug:slug,widget_id:element.closest(".wi
 document.addEventListener("click",async event=>{const button=event.target.closest("[data-pp-trigger]");if(!button||button.disabled)return;const index=Number(button.dataset.ppTrigger),playlistIndex=Number(button.dataset.ppPlaylistIndex);if(!Number.isInteger(index)||index<0||!Number.isInteger(playlistIndex)||playlistIndex<0)return;button.disabled=true;try{await api("/api/integrations/propresenter/active-slide",{method:"POST",body:JSON.stringify({index,playlist_index:playlistIndex,presentation_uuid:button.dataset.ppPresentationUuid||null,is_pco:button.dataset.ppIsPco==="true",...triggerScope(button)})});await refresh(true)}catch(error){alert(error.message)}finally{button.disabled=false}});
 document.addEventListener("click",async event=>{const button=event.target.closest("[data-pp-playlist-trigger]");if(!button||button.disabled)return;const index=Number(button.dataset.ppPlaylistTrigger);if(!Number.isInteger(index)||index<0)return;button.disabled=true;try{await api("/api/integrations/propresenter/active-playlist-item",{method:"POST",body:JSON.stringify({index,presentation_uuid:button.dataset.ppPresentationUuid||null,is_pco:button.dataset.ppIsPco==="true",...triggerScope(button)})})}catch(error){alert(error.message)}finally{button.disabled=false}});
 document.addEventListener("click",async event=>{const button=event.target.closest("[data-pp-nav],[data-pp-item-nav]");if(!button||button.disabled)return;const direction=button.dataset.ppNav||button.dataset.ppItemNav,endpoint=button.dataset.ppItemNav?"navigate-item":"navigate",status=button.closest(".pp-control-pad")?.querySelector("[data-pp-control-status]");button.disabled=true;if(status)status.textContent=direction==="next"?"Advancing ProPresenter…":"Going back in ProPresenter…";try{await api(`/api/integrations/propresenter/${endpoint}/${direction}`,{method:"POST",body:JSON.stringify(triggerScope(button))});await refresh(true)}catch(error){if(status)status.textContent=error.message}finally{button.disabled=false}});
+document.addEventListener("click",async event=>{const button=event.target.closest("[data-lighting-button]");if(!button||button.disabled)return;button.disabled=true;try{await api("/api/integrations/lighting/button",{method:"POST",body:JSON.stringify({name:button.dataset.lightingButton,mode:"toggle",...triggerScope(button)})});await loadLightingButtons(button.closest(".widget"),true)}catch(error){alert(error.message)}finally{button.disabled=false}});
+async function loadLightingButtons(widget,force=false){const root=widget?.querySelector("[data-lighting-buttons]");if(!root||(!force&&root.dataset.loaded==="true"))return;try{const result=await api("/api/integrations/lighting/buttons");root.dataset.loaded="true";root.innerHTML=(result.items||[]).map(item=>`<button type="button" data-lighting-button="${escapeHtml(item.name)}" class="${item.pressed?"active":""}" style="--cue-color:${safeCssColor(item.color)}"><strong>${escapeHtml(item.name)}</strong><span>${escapeHtml(item.page)}</span></button>`).join("")||'<div class="empty">No lighting buttons are exposed</div>'}catch(error){root.innerHTML=`<div class="empty">${escapeHtml(error.message)}</div>`}}
 const keyboardStorageKey=widgetId=>`churchboard:${slug}:propresenter-keyboard:${widgetId}`;
 function syncPlaylistOperatorToggles(root=document){root.querySelectorAll('[data-widget-type="playlist"]').forEach(element=>{const widgetId=element.dataset.widget,controls=element.querySelector("[data-pp-controls-toggle]"),keyboard=element.querySelector("[data-pp-keyboard-toggle]");if(!keyboard)return;const controlsEnabled=!!controls?.checked,stored=localStorage.getItem(keyboardStorageKey(widgetId)),enabled=stored===null?keyboard.dataset.defaultChecked==="true":stored==="true";keyboard.disabled=!controlsEnabled;keyboard.checked=controlsEnabled&&enabled})}
 function keyboardPlaylistWidget(){const toggle=document.querySelector('[data-widget-type="playlist"] [data-pp-keyboard-toggle]:checked:not(:disabled)'),widgetId=toggle?.closest(".widget")?.dataset.widget;return(dashboard?.widgets||[]).find(widget=>String(widget.id)===String(widgetId))}
@@ -36,6 +39,7 @@ document.addEventListener("keydown",async event=>{
   catch(error){setPlaylistKeyboardStatus(error.message,true)}finally{ppKeyboardInFlight=false}
 });
 async function loadBoard(){
+  await loadChurchBoardModules();
   dashboard=await api(`/api/dashboards/${encodeURIComponent(slug)}`);
   document.title=`${dashboard.name} · ChurchBoard`;
   dashboard.background_color=applyDashboardAppearance(document.body,dashboard.background_color);
@@ -54,6 +58,7 @@ function mergeFullState(fresh){
   if(fresh.timing&&lastState.timing&&fresh.timing.service_items){
     fresh.timing.service_items=retainCachedValue(lastState.timing.service_items,fresh.timing.service_items);
   }
+  if(lastState.prodmesh_rta?.transport==="websocket"&&Number(lastState.prodmesh_rta.time_ms)>Number(fresh.prodmesh_rta?.time_ms||0))fresh.prodmesh_rta=lastState.prodmesh_rta;
   return fresh;
 }
 function mergeCompactState(fresh){
@@ -79,6 +84,7 @@ async function refresh(forceFull=false){
   }catch(error){console.error(error)}finally{refreshInFlight=false}
 }
 async function checkServerInstance(){try{const info=await api("/api/app-info");if(serverInstance&&serverInstance!==info.instance_id){location.reload();return}serverInstance=info.instance_id}catch(error){}}
+function connectProdMeshStream(){clearTimeout(prodmeshReconnectTimer);if(prodmeshSocket&&[WebSocket.CONNECTING,WebSocket.OPEN].includes(prodmeshSocket.readyState))return;const scheme=location.protocol==="https:"?"wss":"ws";prodmeshSocket=new WebSocket(`${scheme}://${location.host}/api/integrations/prodmesh-rta/stream`);prodmeshSocket.onmessage=event=>{try{const frame=JSON.parse(event.data),currentTime=Number(lastState.prodmesh_rta?.time_ms||0),frameTime=Number(frame.time_ms||0);if(frameTime&&frameTime<currentTime)return;lastState={...lastState,prodmesh_rta:frame};render()}catch(error){console.warn("Invalid ProdMesh stream frame",error)}};prodmeshSocket.onclose=()=>{prodmeshSocket=null;prodmeshReconnectTimer=setTimeout(connectProdMeshStream,1000)};prodmeshSocket.onerror=()=>prodmeshSocket?.close()}
 function render(){
   const root=document.querySelector("#dashboard"),widgets=dashboard.widgets||[],existing=new Map([...root.querySelectorAll(":scope > .widget")].map(element=>[String(element.dataset.widget),element])),activeIds=new Set(),timing=lastState.timing||{};
   let changed=false;
@@ -97,7 +103,7 @@ function render(){
   for(const [id,element] of existing){if(!activeIds.has(id)){element.remove();widgetRenderKeys.delete(id);orderScrollPositions.delete(id);playlistScrollPositions.delete(id);changed=true}}
   if(!widgets.length&&root.innerHTML!==`<div class="empty">This dashboard has no widgets.</div>`){root.innerHTML=`<div class="empty">This dashboard has no widgets.</div>`;changed=true}
   updateTimingWidgets();updateOrderTimingWidgets();
-  if(changed){tickClocks();enhanceDynamicContent(root);syncPlaylistOperatorToggles(root)}
+  if(changed){tickClocks();enhanceDynamicContent(root);syncPlaylistOperatorToggles(root);root.querySelectorAll('[data-widget-type="lighting"]').forEach(widget=>loadLightingButtons(widget))}
   updatePlaylistLiveState(root);
   queueDashboardFit();
   updateNativeSpl();
@@ -121,6 +127,9 @@ function widgetStateKey(widget,state){
   if(widget.type==="restream")return`restream:${JSON.stringify(state.restream||{})}`;
   if(widget.type==="livestreams")return`livestreams:${JSON.stringify([state.livestreams||[],settings.sources||[]])}`;
   if(widget.type==="propresenter_timers")return`propresenter-timers:${JSON.stringify(pp.timers||[])}`;
+  if(widget.type==="ndi")return`ndi:${settings.source_name||""}`;
+  if(widget.type==="prodmesh_rta")return`prodmesh-rta:${JSON.stringify(state.prodmesh_rta||{})}:${JSON.stringify(settings)}`;
+  if(widget.type==="lighting")return`lighting:${JSON.stringify(settings)}`;
   return`${widget.type}:${JSON.stringify(state)}`;
 }
 function updatePlaylistLiveState(root=document){const pp=lastState.propresenter||{},uuid=String(pp.presentation_uuid||""),slide=Number(pp.current?.index)||0;root.querySelectorAll('[data-widget-type="playlist"]').forEach(widget=>{const widgetId=String(widget.dataset.widget||""),key=`${uuid}:${slide}`;widget.querySelectorAll("[data-pp-item-uuid]").forEach(item=>{const active=String(item.dataset.ppItemUuid||"")===uuid;item.classList.toggle("active",active);const status=item.querySelector("[data-pp-item-status]");if(status)status.textContent=active?"On air":status.dataset.idleLabel||""});widget.querySelectorAll("[data-pp-slide-uuid]").forEach(item=>item.classList.toggle("active",String(item.dataset.ppSlideUuid||"")===uuid&&Number(item.dataset.ppSlideNumber)===slide));if(playlistActiveKeys.get(widgetId)===key)return;playlistActiveKeys.set(widgetId,key);const configured=(dashboard?.widgets||[]).find(item=>String(item.id)===widgetId);if(configured?.settings?.auto_scroll===false)return;const target=widget.querySelector(".pp-list-slide.active")||widget.querySelector(".pp-list-presentation.active");target?.scrollIntoView({block:"nearest",inline:"nearest",behavior:"smooth"})})}
@@ -175,7 +184,9 @@ function updatePlans(){
   if(planSelectionInFlight)return;
   const manual=lastState.manual_plan,desired=manual?`${manual.service_type_id}:${manual.id}`:"";
   if(select.value!==desired)select.value=desired;
+  updateServiceTimes();
 }
+function updateServiceTimes(){const select=document.querySelector("#active-service-time"),service=lastState.service||{},times=service.times||[],key=JSON.stringify(times.map(row=>[row.id,row.name,row.starts_at]));if(key!==serviceTimeOptionsKey){select.innerHTML='<option value="">Automatic for current time</option>'+times.map(row=>`<option value="${escapeHtml(String(row.id||""))}">${escapeHtml(row.name||new Date(row.starts_at).toLocaleTimeString([],{hour:"numeric",minute:"2-digit"}))}</option>`).join("");serviceTimeOptionsKey=key}const manual=lastState.manual_service_time||{};select.value=String(manual.plan_id||"")===String(service.id||"")?String(manual.id||""):"";select.disabled=!times.length}
 document.querySelector("#active-plan").addEventListener("change",async event=>{
   const select=event.currentTarget,status=document.querySelector("#active-plan-status"),[service_type_id,id]=select.value.split(":");
   planSelectionInFlight=true;select.disabled=true;status.textContent="Selecting service…";
@@ -183,5 +194,6 @@ document.querySelector("#active-plan").addEventListener("change",async event=>{
   catch(error){status.textContent=error.message}
   finally{planSelectionInFlight=false;select.disabled=false;updatePlans()}
 });
+document.querySelector("#active-service-time").addEventListener("change",async event=>{const select=event.currentTarget,status=document.querySelector("#active-service-time-status");select.disabled=true;status.textContent="Selecting service time…";try{lastState=await api("/api/active-service-time",{method:"PUT",body:JSON.stringify({id:select.value||null,plan_id:lastState.service?.id||null})});render();status.textContent="";setMenuOpen(false)}catch(error){status.textContent=error.message}finally{select.disabled=false;updateServiceTimes()}});
 api("/api/dashboards").then(data=>document.querySelector("#board-links").innerHTML=data.items.map(item=>`<div class="board-menu-row"><a class="board-menu-open" href="/display/${encodeURIComponent(item.slug)}">${escapeHtml(item.name)}</a><a class="board-menu-edit" href="/editor/${encodeURIComponent(item.slug)}" aria-label="Edit ${escapeHtml(item.name)}">Edit</a></div>`).join(""));
-checkServerInstance();loadBoard(); setInterval(refresh,150); setInterval(tickClocks,250);setInterval(checkServerInstance,5000);
+checkServerInstance();connectProdMeshStream();loadBoard(); setInterval(refresh,150); setInterval(tickClocks,250);setInterval(checkServerInstance,5000);

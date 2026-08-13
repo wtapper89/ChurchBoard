@@ -32,7 +32,7 @@ Sign in as the user ChurchBoard will use, then:
 1. Open Planning Center's [Developer applications page](https://api.planningcenteronline.com/oauth/applications).
 2. Find **Personal Access Tokens** and create a token named clearly, such as `ChurchBoard – Worship Center Mac`.
 3. Copy the token's **Application ID** and **Secret**.
-4. Open ChurchBoard Setup at `http://127.0.0.1:8040/admin`.
+4. Open **Setup & modules** at `http://127.0.0.1:8040/modules`, then choose the **Planning Center Services** module.
 5. Enable **Planning Center**, paste the Application ID and Secret, and choose **Save & test connection**.
 6. Select the Services service types ChurchBoard should use.
 7. Set the automatic plan-selection window, then save settings.
@@ -51,7 +51,7 @@ For each plan:
 2. Schedule each person in the correct position for that specific plan.
 3. Resolve `Needed` or declined assignments before the service when possible.
 4. In ChurchBoard's dashboard editor, select the categories/teams and positions the widget should show, then drag them into display order.
-5. In ChurchBoard Setup, map microphones to those same Planning Center positions.
+5. In **Setup & modules**, open the Shure or Sennheiser module and map microphones to those same Planning Center positions.
 
 An open selected position appears as **Unassigned**. A scheduled person still appears when the position has no microphone mapping.
 

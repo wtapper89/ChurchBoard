@@ -7,3 +7,4 @@ data/churchboard.json
 data/*.log
 build/
 dist/
+website/

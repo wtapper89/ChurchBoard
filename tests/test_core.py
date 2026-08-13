@@ -1,20 +1,98 @@
 from __future__ import annotations
 
 import asyncio
+import base64
+import json
 import tempfile
 import unittest
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 from app.models import Dashboard
-from app.services.planning_center import PlanningCenterClient, calculate_timing, consolidate_people, item_leader, position_key, selected_service_time, service_items
-from app.services.shure import ShureClient, battery_percent, percent, transmitter_active
-from app.services.sennheiser import parse_ssc_response, ssc_request
-from app.services.propresenter import ProPresenterClient
-from app.services.restream import RestreamClient
-from app.services.runtime import RuntimeService
+from app.modules.planning_center import PlanningCenterClient, calculate_timing, consolidate_people, item_leader, people_for_service_time, position_key, selected_service_time, service_items
+from app.modules.livekit import HostedIntercomServer, access_token
+from app.modules.ndi import NDIRuntime
+from app.modules.media_cache import PlanningCenterMediaCache
+from app.modules.shure import ShureClient, battery_percent, percent, transmitter_active
+from app.modules.sennheiser import parse_ssc_response, ssc_request
+from app.modules.propresenter import ProPresenterClient
+from app.modules.restream import RestreamClient
+from app.modules.runtime import RuntimeService
+from app.modules.prodmesh_rta import ProdMeshRTAClient
+from app.modules.prodmesh_host import HostedProdMeshRTA
+from app.modules.spl_reports import SPLReportStore
+from app.modules.thelightingcontroller import TheLightingControllerClient
 from app.store import ConfigStore
+
+
+class ModuleIntegrationTests(unittest.IsolatedAsyncioTestCase):
+    async def test_prodmesh_rta_combines_level_and_band_payloads(self):
+        class Response:
+            def __init__(self, payload): self.payload = payload
+            def raise_for_status(self): return None
+            def json(self): return self.payload
+        class Http:
+            async def get(self, url):
+                return Response({"fast_db": 82.4, "mode": "acoustic", "signal": {"state": "ok"}} if url.endswith("/api/spl") else {"centers_hz": [20, 25], "bands_db": [61.2, 63.8]})
+            async def aclose(self): return None
+        client = ProdMeshRTAClient({"enabled": True, "host": "10.0.0.8", "port": 8517})
+        await client._client.aclose(); client._client = Http()
+        client._ensure_stream = lambda: None
+        result = await client.levels()
+        self.assertTrue(result["connected"])
+        self.assertEqual(result["fast_db"], 82.4)
+        self.assertEqual(result["bands_db"], [61.2, 63.8])
+        self.assertEqual(result["transport"], "http-fallback")
+
+    def test_prodmesh_native_stream_frame_keeps_complete_analyzer_payload(self):
+        payload = {"type": "levels", "time_ms": 1234, "mode": "program", "cal_db": 0, "fast_db": -18.2, "centers_hz": [31.5, 40], "bands_db": [-45.0, -22.3], "peaks_db": [-40.0, -20.0], "metrics": {"lufsS": -16.4}, "targets": [{"id": "lufsS", "lo": -18, "hi": -14}], "signal": {"state": "ok"}}
+        frame = ProdMeshRTAClient.normalize_stream_frame(payload)
+        self.assertEqual(frame["transport"], "websocket")
+        self.assertEqual(frame["bands_db"], [-45.0, -22.3])
+        self.assertEqual(frame["metrics"]["lufsS"], -16.4)
+        self.assertEqual(frame["targets"][0]["hi"], -14)
+        self.assertIsNone(ProdMeshRTAClient.normalize_stream_frame({"type": "event", "event": "alarm"}))
+
+    def test_audio_history_separates_service_times_and_items(self):
+        with tempfile.TemporaryDirectory() as directory:
+            reports = SPLReportStore(Path(directory) / "samples.jsonl")
+            service = {"id": "plan-1", "title": "Sunday Worship"}
+            timing = {"service_time_id": "time-2", "service_time_name": "11:00 AM"}
+            reports.record({"fast_db": 78.0}, service, {"id": "song-1", "title": "Song"}, "fast_db", "A-weighted Fast", timing=timing, source="ProdMesh RTA", unit="dB SPL")
+            reports.record({"fast_db": 82.0}, service, {"id": "song-1", "title": "Song"}, "fast_db", "A-weighted Fast", timing=timing, source="ProdMesh RTA", unit="dB SPL")
+            self.assertEqual(reports.services()[0]["id"], "plan-1--time-2")
+            report = reports.report("plan-1--time-2")
+            self.assertEqual(report["items"][0]["average"], 80.0)
+            self.assertEqual(report["items"][0]["source"], "ProdMesh RTA")
+
+    def test_embedded_prodmesh_host_starts_and_supervises_bundled_engine(self):
+        host = HostedProdMeshRTA()
+        process = MagicMock()
+        process.poll.return_value = None
+        process.pid = 8517
+        with patch.object(host, "executable", return_value=Path("/tmp/ProdMeshRemoteRTA")), patch("app.modules.prodmesh_host.subprocess.Popen", return_value=process) as start:
+            host.configure({"enabled": True, "mode": "embedded", "port": 8517})
+            host.configure({"enabled": True, "mode": "embedded", "port": 8517})
+        self.assertEqual(start.call_count, 1)
+        self.assertEqual(start.call_args.args[0], ["/tmp/ProdMeshRemoteRTA", "--api", "8517"])
+        self.assertTrue(host.status({"enabled": True, "mode": "embedded"})["running"])
+
+    def test_embedded_prodmesh_host_reports_missing_engine(self):
+        host = HostedProdMeshRTA()
+        with patch.object(host, "executable", return_value=None):
+            host.configure({"enabled": True, "mode": "embedded", "port": 8517})
+            status = host.status({"enabled": True, "mode": "embedded"})
+        self.assertFalse(status["available"])
+        self.assertIn("does not contain", status["error"])
+
+    def test_lighting_button_list_handles_zero_based_controller_coordinates(self):
+        xml = '<pages><page name="Live" columns="2"><button column="0" line="0" color="#ff0000" pressed="1">Verse</button><button column="1" line="0">Chorus</button></page></pages>'
+        root = __import__("xml.etree.ElementTree", fromlist=["ElementTree"]).fromstring(xml)
+        elements = list(root.find("page").findall("button"))
+        offset = 1 if any(element.get(axis) == "0" for element in elements for axis in ("column", "line")) else 0
+        self.assertEqual(offset, 1)
+        self.assertEqual([int(item.get("column")) + offset for item in elements], [1, 2])
 
 
 class StoreTests(unittest.TestCase):
@@ -44,6 +122,11 @@ class StoreTests(unittest.TestCase):
             self.assertTrue(slides["show_parts"])
             self.assertNotIn("theme", store.load()["dashboards"][0])
             self.assertEqual(store.load()["settings"]["planning_center"]["service_types"], [])
+            self.assertEqual(store.load()["settings"]["server"]["producer_port"], 80)
+            self.assertEqual(store.load()["settings"]["prodmesh_rta"]["mode"], "embedded")
+            self.assertTrue(store.load()["settings"]["server"]["producer_port_enabled"])
+            self.assertEqual(store.load()["settings"]["intercom"]["party_lines"][0]["id"], "production")
+            self.assertFalse(store.load()["settings"]["ndi"]["enabled"])
 
     def test_light_theme_migrates_to_dark_customizable_background(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -88,6 +171,7 @@ class StoreTests(unittest.TestCase):
             data = store.load()
             data["settings"]["planning_center"]["secret"] = "do-not-return"
             data["settings"]["restream"]["access_token"] = "also-do-not-return"
+            data["settings"]["intercom"]["api_secret"] = "livekit-secret"
             store.save(data)
             public = store.public_settings()["planning_center"]
             self.assertEqual(public["secret"], "")
@@ -95,6 +179,50 @@ class StoreTests(unittest.TestCase):
             restream = store.public_settings()["restream"]
             self.assertEqual(restream["access_token"], "")
             self.assertTrue(restream["access_token_configured"])
+            intercom = store.public_settings()["intercom"]
+            self.assertEqual(intercom["api_secret"], "")
+            self.assertTrue(intercom["api_secret_configured"])
+            self.assertEqual(intercom["api_key"], "")
+            self.assertEqual(intercom["url"], "")
+
+    def test_ndi_sdk_root_resolves_the_nested_macos_runtime(self):
+        with patch("app.modules.ndi.platform.system", return_value="Darwin"):
+            candidates = [str(path) for path in NDIRuntime._candidates("/Library/NDI SDK for Apple")]
+        self.assertIn("/Library/NDI SDK for Apple/lib/macOS/libndi.dylib", candidates)
+
+    def test_livekit_token_has_audio_room_grant_and_role_metadata(self):
+        token = access_token(
+            "api-key", "api-secret", "churchboard-user-1", "Jordan Lee",
+            "churchboard-production", {"role": "admin", "party_line_id": "production"},
+        )
+        encoded_payload = token.split(".")[1]
+        encoded_payload += "=" * (-len(encoded_payload) % 4)
+        payload = json.loads(base64.urlsafe_b64decode(encoded_payload))
+        self.assertEqual(payload["iss"], "api-key")
+        self.assertEqual(payload["sub"], "churchboard-user-1")
+        self.assertEqual(payload["video"]["room"], "churchboard-production")
+        self.assertTrue(payload["video"]["canPublish"])
+        self.assertEqual(payload["video"]["canPublishSources"], ["microphone"])
+        self.assertEqual(json.loads(payload["metadata"])["role"], "admin")
+
+    def test_hosted_intercom_config_uses_selected_local_ports_and_private_credentials(self):
+        with tempfile.TemporaryDirectory() as directory:
+            service = HostedIntercomServer(Path(directory) / "churchboard.json")
+            service.signal_port, service.tcp_port, service.udp_port = 7980, 7981, 7982
+            config = service._write_config("churchboard-key", "12345678901234567890123456789012")
+            contents = config.read_text(encoding="utf-8")
+            self.assertIn("port: 7980", contents)
+            self.assertIn("tcp_port: 7981", contents)
+            self.assertIn("udp_port: 7982", contents)
+            self.assertIn('"churchboard-key": "12345678901234567890123456789012"', contents)
+
+    def test_hosted_intercom_moves_to_next_port_set_when_udp_default_is_busy(self):
+        def available(port, socket_type):
+            return port != HostedIntercomServer.UDP_PORT
+
+        with patch.object(HostedIntercomServer, "_port_available", side_effect=available):
+            ports = HostedIntercomServer._available_port_set()
+        self.assertEqual(ports, (7890, 7891, 7892))
 
     def test_restream_client_normalizes_live_event_and_destinations(self):
         client = RestreamClient({"enabled": True, "access_token": "token"})
@@ -138,6 +266,25 @@ class PlanningCenterTests(unittest.TestCase):
         self.assertEqual([position["name"] for position in people[0]["positions"]], ["Acoustic Guitar", "Vocals"])
         self.assertEqual(people[0]["position_keys"], ["band::acoustic guitar", "band::vocals"])
 
+    def test_people_are_filtered_for_the_selected_service_time(self):
+        people = consolidate_people([
+            {"id": "john-row", "person_id": "john", "name": "John", "position": "Vox 1", "position_key": "band::vox 1", "team_id": "band", "team_name": "Band", "service_time_ids": ["early", "middle"]},
+            {"id": "will-row", "person_id": "will", "name": "Will", "position": "Vox 1", "position_key": "band::vox 1", "team_id": "band", "team_name": "Band", "service_time_ids": ["late"]},
+            {"id": "jane-row", "person_id": "jane", "name": "Jane", "position": "Vox 2", "position_key": "band::vox 2", "team_id": "band", "team_name": "Band", "service_time_ids": []},
+        ])
+        self.assertEqual([person["name"] for person in people_for_service_time(people, "early")], ["John", "Jane"])
+        self.assertEqual([person["name"] for person in people_for_service_time(people, "late")], ["Will", "Jane"])
+
+    def test_time_specific_secondary_position_stays_available_for_assignment_cards(self):
+        people = consolidate_people([
+            {"id": "will-vox2", "person_id": "will", "name": "Will", "position": "Vox 2", "position_key": "band::vox 2", "team_id": "band", "team_name": "Band", "service_time_ids": []},
+            {"id": "will-vox1", "person_id": "will", "name": "Will", "position": "Vox 1", "position_key": "band::vox 1", "team_id": "band", "team_name": "Band", "service_time_ids": ["late"]},
+        ])
+        early = people_for_service_time(people, "early")[0]
+        late = people_for_service_time(people, "late")[0]
+        self.assertEqual(early["position_keys"], ["band::vox 2"])
+        self.assertEqual(late["position_keys"], ["band::vox 2", "band::vox 1"])
+
     def test_manual_plan_wins(self):
         client = PlanningCenterClient({"open_days_before": 0, "open_hours_before": 0, "close_hours_after": 0})
         plans = [{"id": "1", "service_type_id": "a", "starts_at": "2030-01-01T00:00:00+00:00"}, {"id": "2", "service_type_id": "b", "starts_at": "2030-01-02T00:00:00+00:00"}]
@@ -151,6 +298,7 @@ class PlanningCenterTests(unittest.TestCase):
         self.assertEqual(selected_service_time(plan, datetime(2030, 1, 6, 12, 0, tzinfo=timezone.utc))["id"], "early")
         self.assertEqual(selected_service_time(plan, datetime(2030, 1, 6, 14, 45, tzinfo=timezone.utc))["id"], "late")
         self.assertEqual(selected_service_time(plan, datetime(2030, 1, 6, 16, 15, tzinfo=timezone.utc))["id"], "late")
+        self.assertEqual(selected_service_time(plan, datetime(2030, 1, 6, 12, 0, tzinfo=timezone.utc), "late")["id"], "late")
 
     def test_timing_uses_service_specific_exclusions_and_start(self):
         plan = {
@@ -249,7 +397,7 @@ class PlanningCenterCatalogTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(params["where[media_tag_ids][]"], "tag-audio")
             return {
                 "data": [{"id": "media-1", "attributes": {"title": "Audio Instructions", "image_url": "https://example.test/cover.png"}, "relationships": {"attachments": {"data": [{"type": "Attachment", "id": "file-1"}]}}}],
-                "included": [{"type": "Attachment", "id": "file-1", "attributes": {"url": "https://example.test/audio.pdf", "filetype": "pdf", "display_name": "Audio.pdf"}}],
+                "included": [{"type": "Attachment", "id": "file-1", "attributes": {"url": "https://example.test/audio.pdf", "filetype": "pdf", "display_name": "Audio.pdf"}, "links": {"self": "https://api.planningcenteronline.com/services/v2/media/media-1/attachments/file-1"}}],
             }
 
         client._get_all = fake_get_all
@@ -260,6 +408,7 @@ class PlanningCenterCatalogTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(resources[0]["source"], "Planning Center")
         self.assertEqual(resources[0]["inline_url"], "/api/producer/planning-center-media/media-1/content")
         self.assertEqual(resources[0]["filename"], "Audio.pdf")
+        self.assertEqual(resources[0]["download_action_url"], "https://api.planningcenteronline.com/services/v2/media/media-1/attachments/file-1/open")
     async def test_catalog_groups_positions_by_team(self):
         client = PlanningCenterClient({"enabled": True, "application_id": "id", "secret": "secret", "service_type_ids": ["st-1"]})
 
@@ -383,6 +532,47 @@ class PlanningCenterCatalogTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(live["can_control"])
         self.assertFalse(live["has_control"])
 
+    async def test_planning_center_media_cache_downloads_and_prunes_removed_media(self):
+        class Response:
+            content = b"%PDF-1.7\nChurchBoard test"
+            headers = {"content-type": "application/pdf"}
+
+            def raise_for_status(self):
+                return None
+
+        class Downloader:
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *_args):
+                return None
+
+            async def get(self, url):
+                self_url = url
+                return Response()
+
+        class Client:
+            async def attachment_download_url(self, action_url):
+                self.action_url = action_url
+                return "https://objects.example.test/audio.pdf"
+
+        with tempfile.TemporaryDirectory() as directory:
+            cache = PlanningCenterMediaCache(Path(directory) / "state.json")
+            client = Client()
+            resource = {
+                "id": "media-1", "title": "Audio Instructions", "filename": "Audio.pdf",
+                "content_type": "application/pdf", "download_action_url": "https://api.example.test/attachment/open",
+            }
+            with patch("app.modules.media_cache.httpx.AsyncClient", return_value=Downloader()):
+                result = await cache.sync(client, {"tag-audio": [resource]})
+            cached = cache.file_for("media-1")
+            self.assertTrue(result["tag-audio"][0]["cached"])
+            self.assertEqual(client.action_url, resource["download_action_url"])
+            self.assertIsNotNone(cached)
+            self.assertEqual(cached[0].read_bytes(), Response.content)
+            await cache.sync(client, {})
+            self.assertIsNone(cache.file_for("media-1"))
+
 
 class ShureTests(unittest.TestCase):
     def test_shure_levels_are_clamped(self):
@@ -446,7 +636,7 @@ class ShureStatusTests(unittest.IsolatedAsyncioTestCase):
 
         client = ShureClient({"enabled": True})
         receiver = {"id": "rack-a", "name": "Rack A", "host": "192.0.2.1", "port": 2202, "channels": 1}
-        with patch("app.services.shure.asyncio.open_connection", AsyncMock(return_value=(Reader(), Writer()))):
+        with patch("app.modules.shure.asyncio.open_connection", AsyncMock(return_value=(Reader(), Writer()))):
             mic = (await client._receiver(receiver))[0]
         self.assertFalse(mic["online"])
         self.assertTrue(mic["receiver_online"])
@@ -559,14 +749,14 @@ class RuntimeAssignmentTests(unittest.TestCase):
             }
             state = {"service": service}
             first = {"current_item_id": "one", "current_item_time_id": "time-one", "current_live_start_at": "2000-01-01T12:00:00+00:00"}
-            with patch("app.services.runtime.time.monotonic", return_value=1000):
+            with patch("app.modules.runtime.time.monotonic", return_value=1000):
                 runtime._apply_live_timing(state, first)
             self.assertTrue(state["timing"]["rehearsal"])
             self.assertEqual(state["timing"]["item_elapsed"], 0)
             self.assertEqual(state["timing"]["overall_delta"], 0)
 
             second = {"current_item_id": "two", "current_item_time_id": "time-two", "current_live_start_at": "2000-01-01T12:01:00+00:00"}
-            with patch("app.services.runtime.time.monotonic", return_value=1075):
+            with patch("app.modules.runtime.time.monotonic", return_value=1075):
                 runtime._apply_live_timing(state, second)
             self.assertEqual(state["timing"]["current_item"]["id"], "two")
             self.assertEqual(state["timing"]["item_elapsed"], 0)
@@ -584,7 +774,7 @@ class RuntimeAssignmentTests(unittest.TestCase):
                 ],
             }
             state = {"service": service, "timing": calculate_timing(service)}
-            with patch("app.services.runtime.time.monotonic", return_value=1000):
+            with patch("app.modules.runtime.time.monotonic", return_value=1000):
                 runtime._apply_provisional_rehearsal_target(
                     state,
                     service["items"][1],
@@ -596,7 +786,7 @@ class RuntimeAssignmentTests(unittest.TestCase):
             self.assertEqual(state["timing"]["item_elapsed"], 0)
 
             stale_live = {"current_item_id": "grace", "current_item_time_id": "pco-old", "current_live_start_at": "2000-01-01T12:00:00+00:00"}
-            with patch("app.services.runtime.time.monotonic", return_value=1005):
+            with patch("app.modules.runtime.time.monotonic", return_value=1005):
                 runtime._apply_live_timing(state, stale_live)
             self.assertEqual(state["timing"]["item_elapsed"], 5)
 
@@ -660,7 +850,7 @@ class RuntimeAssignmentTests(unittest.TestCase):
                 return Response()
 
         fake = Client()
-        with patch("app.services.runtime.httpx.AsyncClient", return_value=fake):
+        with patch("app.modules.runtime.httpx.AsyncClient", return_value=fake):
             statuses = asyncio.run(RuntimeService._livestream_statuses([{
                 "id": "facebook",
                 "provider": "facebook",
@@ -730,7 +920,7 @@ class RuntimeAssignmentTests(unittest.TestCase):
                 await asyncio.sleep(0)
                 return await runtime.refresh()
 
-            with patch("app.services.runtime.PlanningCenterClient", FakePlanningCenterClient), patch("app.services.runtime.time.monotonic", return_value=106):
+            with patch("app.modules.runtime.PlanningCenterClient", FakePlanningCenterClient), patch("app.modules.runtime.time.monotonic", return_value=106):
                 state = asyncio.run(refresh_twice())
 
             self.assertEqual([item["id"] for item in state["service"]["items"]], ["welcome", "new-song"])
@@ -919,7 +1109,7 @@ class ProPresenterLiveSyncTests(unittest.IsolatedAsyncioTestCase):
                     return {**_live, "current_item_id": "2", "current_live_start_at": "2030-01-01T12:01:00Z"}
 
             client = FakeClient()
-            with patch("app.services.runtime.PlanningCenterClient", return_value=client):
+            with patch("app.modules.runtime.PlanningCenterClient", return_value=client):
                 state = await runtime.service_control("next")
             self.assertEqual(client.action, "go_to_next_item")
             self.assertEqual(state["timing"]["current_item"]["id"], "2")
@@ -1221,7 +1411,7 @@ class ProPresenterPollingTests(unittest.IsolatedAsyncioTestCase):
 
         fake = FakeHttp()
         client = ProPresenterClient({"enabled": True, "host": "127.0.0.1", "port": 50001})
-        with patch("app.services.propresenter.httpx.AsyncClient", return_value=fake):
+        with patch("app.modules.propresenter.httpx.AsyncClient", return_value=fake):
             content, media_type = await client.thumbnail("ABC-123", 3)
         self.assertEqual(content, b"jpeg")
         self.assertEqual(media_type, "image/jpeg")

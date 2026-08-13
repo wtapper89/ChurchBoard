@@ -5,6 +5,16 @@ const updateActions = document.querySelector("#update-actions");
 const installUpdate = document.querySelector("#install-update");
 const releaseLink = document.querySelector("#release-link");
 
+function boardLetters(value) {
+  const words=String(value||"Board").trim().toLocaleUpperCase().split(/\s+/).filter(Boolean),rows=[];
+  for(const word of words){
+    if(word.length<=9)rows.push(word);
+    else for(let start=0;start<word.length;start+=8)rows.push(word.slice(start,start+8)+(start+8<word.length?"-":""));
+  }
+  const max=Math.max(1,...rows.map(row=>[...row].length));
+  return `<span class="desktop-board-letter-rows" style="--letter-rows:${rows.length};--max-letters:${max}">${rows.map(row=>`<span>${[...row].map(character=>`<b>${escapeHtml(character)}</b>`).join("")}</span>`).join("")}</span>`;
+}
+
 async function loadDesktop() {
   try {
     const [appResponse, boardsResponse] = await Promise.all([fetch("/api/app-info"), fetch("/api/dashboards")]);
@@ -13,8 +23,11 @@ async function loadDesktop() {
     version.textContent = info.version;
     boards.innerHTML = data.items.map(board => `
       <a class="desktop-board" href="/display/${encodeURIComponent(board.slug)}">
-        <img src="/static/churchboard-icon.png" alt="">
-        <span>${escapeHtml(board.name)}<small>Open display</small></span>
+        <span class="desktop-board-sign" aria-hidden="true">
+          <img src="/static/churchboard-icon.png" alt="">
+          <span class="desktop-board-letter-track">${boardLetters(board.name)}</span>
+        </span>
+        <span class="desktop-board-copy"><strong>${escapeHtml(board.name)}</strong><small>Open display</small></span>
       </a>`).join("") || '<p class="muted">No boards are configured yet.</p>';
   } catch (error) {
     boards.innerHTML = '<p class="muted">ChurchBoard could not load the board list.</p>';

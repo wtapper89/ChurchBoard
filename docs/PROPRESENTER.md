@@ -50,7 +50,7 @@ ChurchBoard reads ProPresenter over the local network.
 2. Select **Network**.
 3. Enable **Network**.
 4. Record the ProPresenter computer's local **IP address** and **Port** shown in this panel.
-5. In ChurchBoard Setup, enable **ProPresenter**, enter that IP address and port, and save settings.
+5. In **Setup & modules**, open **ProPresenter**, enter that IP address and port, and save the module settings.
 6. Open a ChurchBoard display and confirm that slide/item data updates when slides change.
 
 Renewed Vision documents the Network controls in [ProPresenter Preferences](https://learn.renewedvision.com/propresenter/preferences) and its API in [Other Features](https://learn.renewedvision.com/propresenter/other-features).
@@ -78,7 +78,7 @@ Part labels use their ProPresenter colors. If parts do not change with the slide
 
 For the **ProPresenter playlist** widget, select the focused playlist in ProPresenter. ChurchBoard renders its placeholders and presentations in playlist order and shows every slide in each presentation continuously with its section marker. In widget settings, choose **Rendered preview images** or **Slide text**, then choose compact, comfortable, or large density. **Follow and auto-scroll** keeps the active slide in view. ChurchBoard maps repeated arrangement sections back to their original ProPresenter thumbnail cues, updates the active marker in place, and caches stable playlist details and thumbnails to avoid missing repeated previews, full list rebuilds, and image flashes on every poll.
 
-On the live board itself, turn on **Slide controls** to make presentation headings and slide thumbnails clickable. Keep it off on public or read-only displays. ChurchBoard uses the live active presentation's current arrangement, rather than a stale library copy, when building the active slide sequence.
+On the live board itself, turn on **Slide controls** to make presentation headings and slide thumbnails clickable. Keep it off on public or read-only displays. Selecting a numbered thumbnail triggers that same one-based cue number in ProPresenter; ChurchBoard does not treat display numbering as a zero-based API index. ChurchBoard uses the live active presentation's current arrangement, rather than a stale library copy, when building the active slide sequence.
 
 In the dashboard editor, set whether **Slide controls** and **Arrow keys and spacebar** should start enabled for that particular Playlist widget. On the live board an operator can still use the large switches to change them. Left Arrow or Up Arrow moves back; Right Arrow, Down Arrow, or Space advances. An operator override is remembered by that browser and board. The command uses ProPresenter's global next/previous trigger, so it continues into the adjacent playlist item. Keyboard commands are ignored while the operator is typing in a field, using a button or menu, or holding a keyboard modifier.
 
@@ -116,7 +116,7 @@ Before enabling it:
 4. Make sure the ChurchBoard PAT user has **Editor** access to control LIVE. Taking control from another controller can require **Administrator** access.
 5. Resolve all ProPresenter playlist items to the correct Planning Center items.
 
-Then in ChurchBoard Setup:
+Then open the **ProPresenter → Services LIVE** module in **Setup & modules**:
 
 1. Enable **Let ProPresenter drive Planning Center Services LIVE**.
 2. Enable **Automatically take control when needed** only if ChurchBoard should claim control.

@@ -4,11 +4,13 @@ import os
 import json
 import tempfile
 import unittest
+from pathlib import Path
+from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 
 from app.main import app
-from app.services.osm import parse_osm_packet
+from app.modules.osm import parse_osm_packet
 
 
 class ApiTests(unittest.TestCase):
@@ -28,17 +30,17 @@ class ApiTests(unittest.TestCase):
         self.assertEqual(desktop.status_code, 200)
         self.assertIn("churchboard-logo.png", desktop.text)
         self.assertEqual(self.client.get("/", follow_redirects=False).headers["location"], "/desktop")
-        admin = self.client.get("/admin")
-        self.assertEqual(admin.status_code, 200)
-        self.assertIn("churchboard-icon.png", admin.text)
-        self.assertIn('select name="timezone"', admin.text)
-        self.assertNotIn('input name="timezone"', admin.text)
-        for obs_field in ("obs_enabled", "obs_host", "obs_port", "obs_password", "obs_dropped_frames_threshold", "obs_preview_url"):
-            self.assertIn(f'name="{obs_field}"', admin.text)
-        self.assertIn('id="cancel-dashboard" type="button"', admin.text)
-        admin_script = self.client.get("/static/admin.js").text
-        self.assertIn('dialog.close("cancel")', admin_script)
-        self.assertNotIn("pp_remote_control_enabled", admin_script)
+        admin = self.client.get("/admin", follow_redirects=False)
+        self.assertEqual(admin.status_code, 307)
+        self.assertEqual(admin.headers["location"], "/modules")
+        setup = self.client.get("/modules")
+        self.assertEqual(setup.status_code, 200)
+        self.assertIn("Setup &amp; modules", setup.text)
+        self.assertIn('id="core-settings-fields"', setup.text)
+        module_settings = self.client.get("/static/module-settings.js").text
+        self.assertIn('data-setting="timezone"', module_settings)
+        self.assertIn('"obs.enabled"', module_settings)
+        self.assertNotIn("pp_remote_control_enabled", module_settings)
         display = self.client.get("/display/main")
         self.assertEqual(display.status_code, 200)
         self.assertIn('class="menu-brand"', display.text)
@@ -52,7 +54,7 @@ class ApiTests(unittest.TestCase):
         self.assertIn('id="delete-dashboard"', editor.text)
         self.assertIn('input name="show_title" type="checkbox"', editor.text)
         self.assertIn('select name="slide_layout"', editor.text)
-        self.assertNotIn('name="pp_remote_control_enabled"', admin.text)
+        self.assertNotIn('name="pp_remote_control_enabled"', setup.text)
         self.assertIn('ProPresenter playlist', self.client.get("/static/common.js").text)
         self.assertIn('input name="show_parts" type="checkbox"', editor.text)
         self.assertNotIn('id="dashboard-theme"', editor.text)
@@ -63,6 +65,8 @@ class ApiTests(unittest.TestCase):
         self.assertIn('planSelectionInFlight', display_script)
         self.assertIn('event.key==="Escape"', display_script)
         self.assertIn("fitDashboardToViewport", display_script)
+        self.assertIn("connectProdMeshStream", display_script)
+        self.assertIn("/api/integrations/prodmesh-rta/stream", display_script)
         self.assertIn("--dashboard-scale", display_script)
         self.assertIn("resizeDashboardContent(document.querySelector(\"#dashboard\"))", display_script)
         common_script = self.client.get("/static/common.js").text
@@ -81,6 +85,39 @@ class ApiTests(unittest.TestCase):
         self.assertEqual(mark.status_code, 200)
         self.assertIn("<svg", mark.text)
         self.assertTrue(self.client.get("/api/app-info").json()["instance_id"])
+
+    def test_module_manager_and_dependency_lifecycle(self):
+        page = self.client.get("/modules")
+        self.assertEqual(page.status_code, 200)
+        self.assertIn("CHURCHBOARD 2", page.text)
+        self.assertNotIn("PRIVATE BETA", page.text)
+        catalog = self.client.get("/api/modules")
+        self.assertEqual(catalog.status_code, 200)
+        self.assertIn("planning-center", {item["id"] for item in catalog.json()["items"]})
+        installed = self.client.post("/api/modules/services-live-bridge/install")
+        self.assertEqual(installed.status_code, 200)
+        items = {item["id"]: item for item in installed.json()["items"]}
+        self.assertTrue(items["services-live-bridge"]["installed"])
+        self.assertTrue(items["planning-center"]["installed"])
+        self.assertTrue(items["propresenter"]["installed"])
+        blocked = self.client.delete("/api/modules/propresenter")
+        self.assertEqual(blocked.status_code, 400)
+        self.assertIn("require ProPresenter", blocked.json()["detail"])
+        self.assertEqual(self.client.delete("/api/modules/services-live-bridge").status_code, 204)
+
+    def test_page_save_installs_widget_module(self):
+        data = self.client.app.state.store.load()
+        data.setdefault("modules", {}).setdefault("installed", {}).pop("ndi-video", None)
+        self.client.app.state.store.save(data)
+        board = self.client.get("/api/dashboards/main").json()
+        board["widgets"].append({
+            "id": "ndi-auto-module", "type": "ndi", "x": 0, "y": 20, "w": 4, "h": 3,
+            "title": "NDI", "settings": {"source_name": "Stage"},
+        })
+        response = self.client.put("/api/dashboards/main", json=board)
+        self.assertEqual(response.status_code, 200)
+        catalog = {item["id"]: item for item in self.client.get("/api/modules").json()["items"]}
+        self.assertTrue(catalog["ndi-video"]["installed"])
 
     def test_desktop_control_lists_boards_and_requires_tray_to_quit(self):
         response = self.client.get("/api/dashboards")
@@ -116,6 +153,12 @@ class ApiTests(unittest.TestCase):
         producer_script = self.client.get("/static/producer.js").text
         self.assertIn('producerApi("/api/producer/plans")', producer_script)
         self.assertIn("setInterval(refreshPlanChoices,5000)", producer_script)
+        self.assertIn("room.startAudio()", producer_script)
+        self.assertIn('addEventListener("touchstart",pressIntercom,{passive:false})', producer_script)
+        self.assertIn("intercomMicrophoneError", producer_script)
+        producer_css = self.client.get("/static/producer-intercom.css").text
+        self.assertIn("touch-action:none", producer_css)
+        self.assertIn("min-height:64px", producer_css)
         completion = self.client.put("/api/producer/completions", json={"data": {
             "service_id": "demo", "template_id": template["id"], "task_id": template["tasks"][0]["id"],
             "person_id": "person-1", "position_key": "production::audio", "completed": True,
@@ -248,6 +291,9 @@ class ApiTests(unittest.TestCase):
         display_script = self.client.get("/static/display.js").text
         self.assertIn("data-pp-keyboard-toggle", self.client.get("/static/common.js").text)
         self.assertIn("data-pp-controls-toggle", self.client.get("/static/common.js").text)
+        self.assertIn('data-pp-trigger="${slideNumber}"', self.client.get("/static/common.js").text)
+        self.assertNotIn('data-pp-trigger="${slideNumber-1}"', self.client.get("/static/common.js").text)
+        self.assertNotIn('<span>${escapeHtml(source)}</span>', self.client.get("/static/common.js").text)
         self.assertIn('class="pp-switch-track"', self.client.get("/static/common.js").text)
         self.assertIn('role="switch"', self.client.get("/static/common.js").text)
         self.assertIn("/api/integrations/propresenter/navigate/", display_script)
@@ -309,6 +355,26 @@ class ApiTests(unittest.TestCase):
         self.assertEqual(saved.status_code, 200)
         self.assertEqual(saved.json()["server"]["port"], 8080)
 
+    def test_guided_https_setup_configures_paths_without_manual_entry(self):
+        def fake_installer(data_file):
+            from app.certificates import _update_settings
+
+            root = Path(data_file).parent / "https"
+            root.mkdir(parents=True, exist_ok=True)
+            certificate, private_key = root / "churchboard.crt", root / "churchboard.key"
+            certificate.write_text("certificate")
+            private_key.write_text("private key")
+            _update_settings(Path(data_file), certificate, private_key)
+            return {"certificate": str(certificate), "private_key": str(private_key), "ca_certificate": str(root / "ca.crt")}
+
+        with patch("app.certificates.install_macos_https", side_effect=fake_installer):
+            response = self.client.post("/api/settings/https/setup")
+        self.assertEqual(response.status_code, 200)
+        server = response.json()["settings"]["server"]
+        self.assertTrue(server["https_enabled"])
+        self.assertTrue(server["ssl_certfile"].endswith("churchboard.crt"))
+        self.assertTrue(server["ssl_keyfile"].endswith("churchboard.key"))
+
     def test_producer_media_tag_rules_are_saved(self):
         self.client.post("/api/auth/bootstrap", json={"name": "Owner", "email": "owner@example.test", "password": "beta"})
         saved = self.client.put("/api/producer/media-tag-rules", json={"items": [{
@@ -364,13 +430,16 @@ class ApiTests(unittest.TestCase):
         accepted = self.client.post("/api/integrations/osm/measurement", json={"laeq": 78.4, "peak": 92.1, "timestamp": "2026-08-05T12:00:00+00:00"})
         self.assertEqual(accepted.status_code, 202)
         services = self.client.get("/api/reports/services").json()["items"]
-        self.assertEqual(services[0]["id"], "demo")
-        csv_report = self.client.get("/api/reports/services/demo/spl-averages.csv")
+        self.assertEqual(services[0]["id"], "demo--demo-time")
+        csv_report = self.client.get("/api/reports/services/demo--demo-time/spl-averages.csv")
         self.assertEqual(csv_report.status_code, 200)
         self.assertIn("Worship", csv_report.text)
-        graph = self.client.get("/api/reports/services/demo/spl-graph.html")
+        graph = self.client.get("/api/reports/services/demo--demo-time/spl-graph.html")
         self.assertEqual(graph.status_code, 200)
         self.assertIn("78.4", graph.text)
+        report = self.client.get("/api/reports/services/demo--demo-time")
+        self.assertEqual(report.status_code, 200)
+        self.assertEqual(report.json()["items"][0]["title"], "Worship")
 
     def test_osm_remote_api_levels_packet_is_normalized(self):
         packet = b'{"api":"Open Sound Meter","host":"FOH-Mac","source":"source-123","objectName":"House SPL","message":"levels","data":{"A":{"Fast":-61.6,"Slow":-63.9},"C":{"Fast":-58.2,"Slow":-59.1},"Z":{"Fast":-55.8}}}'

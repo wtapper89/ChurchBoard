@@ -16,15 +16,15 @@ The initial cross-platform dashboard concept also drew inspiration from [NewsTal
 
 ## Trademarks and third-party services
 
-ChurchBoard is an independent project. It is not affiliated with, authorized by, sponsored by, or endorsed by Planning Center, Shure, Sennheiser, Renewed Vision, ProPresenter, OBS Studio, Open Sound Meter, Restream, Micboard, Apple, Microsoft, or the Raspberry Pi Foundation.
+ChurchBoard is an independent project. It is not affiliated with, authorized by, sponsored by, or endorsed by Planning Center, Shure, Sennheiser, Renewed Vision, ProPresenter, OBS Studio, Open Sound Meter, Restream, LiveKit, Vizrt NDI AB, Micboard, Apple, Microsoft, or the Raspberry Pi Foundation.
 
-Planning Center, Shure, QLX-D, ULX-D, SLX-D, Sennheiser, EW-DX, Renewed Vision, ProPresenter, OBS Studio, Open Sound Meter, Restream, Apple, macOS, Mac, Microsoft, Windows, and Raspberry Pi are trademarks or registered trademarks of their respective owners. Their names are used only to identify compatible products or services.
+Planning Center, Shure, QLX-D, ULX-D, SLX-D, Sennheiser, EW-DX, Renewed Vision, ProPresenter, OBS Studio, Open Sound Meter, Restream, LiveKit, Apple, macOS, Mac, Microsoft, Windows, and Raspberry Pi are trademarks or registered trademarks of their respective owners. NDI® is a registered trademark of Vizrt NDI AB. Their names are used only to identify compatible products or services.
 
 Use of third-party APIs, devices, accounts, media, and services remains subject to the applicable owner's terms, licenses, privacy policies, permissions, and rate limits. Users are responsible for obtaining permission to display Planning Center profile photos or other personal data on ChurchBoard screens.
 
 ## Privacy and network exposure
 
-ChurchBoard processes Planning Center credentials, schedule data, names, and photos locally on the ChurchBoard computer. It does not provide its own cloud service. The local dashboard server currently has no built-in authentication or TLS; follow [SECURITY.md](SECURITY.md) and keep it on a trusted, access-controlled production network.
+ChurchBoard processes Planning Center credentials, schedule data, names, photos, locally mirrored tagged-media files, and locally generated intercom credentials on the ChurchBoard computer. It does not provide its own cloud service. ChurchBoard supports local accounts, role-based Producer access, HTTPS, and a restricted volunteer listener, but dashboards can intentionally remain visible on the primary production-network port. Follow [SECURITY.md](SECURITY.md) and keep both listeners on a trusted, access-controlled network.
 
 ## Operational and SPL limitations
 

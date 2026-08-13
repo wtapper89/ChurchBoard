@@ -2,7 +2,7 @@
 
 For a guided walkthrough, watch the **[ChurchBoard setup and demo video](https://youtu.be/pE_uWD24G2c)**.
 
-Open `http://127.0.0.1:8040/admin`. Keep **Use demonstration data** enabled while learning the editor, then disable it before connecting production systems.
+Open `http://127.0.0.1:8040/modules`. Keep **Use demonstration data** enabled in the core settings while learning the editor, then disable it before connecting production systems. Each integration is configured by opening its module card.
 
 ![ChurchBoard setup page](screenshots/setup.jpg)
 
@@ -14,7 +14,7 @@ For a complete walkthrough—including a dedicated integration user, least-privi
 
 1. In Planning Center, open the developer Personal Access Token page for the account ChurchBoard should use.
 2. Create a personal token and copy its **Application ID** and **Secret**.
-3. In ChurchBoard Setup, enable **Planning Center** and paste both values.
+3. In **Setup & modules**, open **Planning Center Services**, enable it, and paste both values.
 4. Choose **Save & test connection**.
 5. Check each service type ChurchBoard should consider.
 6. Set the automatic plan window:
@@ -25,6 +25,8 @@ For a complete walkthrough—including a dedicated integration user, least-privi
 The token user needs access to the selected Services plans. Viewer access is a reasonable starting point for a read-only board; Services LIVE control requires Editor access, while taking control from another controller can require Administrator access. Do not grant organization-administrator access just for ChurchBoard.
 
 The service-type name and ID are saved together. If Planning Center temporarily cannot be reached, ChurchBoard retains the last saved display name instead of replacing it with a blank label.
+
+ChurchBoard also selects the active **service time** within that plan. Before a service it prepares the next scheduled time, during a service it uses the active time, and after the final service it retains the last time. Per-time Planning Center assignments are filtered accordingly, so a Vox 1 card can change from the person scheduled at the early services to the person scheduled at the later service. Administrators and editors can temporarily override this from the dashboard menu or Producer workspace; choose **Automatic for current time** to resume automatic selection.
 
 ## 2. Choose positions for a widget
 
@@ -87,7 +89,7 @@ For the complete linked-playlist workflow, recommended Planning Center integrati
 
 1. In ProPresenter, enable the Network API.
 2. Note the ProPresenter computer's local IP address and API port.
-3. In ChurchBoard Setup, enable ProPresenter and enter both values.
+3. In **Setup & modules**, open **ProPresenter**, enable it, and enter both values.
 4. Save settings.
 
 In a ProPresenter widget, choose:
@@ -148,7 +150,7 @@ ChurchBoard can receive calibrated level data directly from [Open Sound Meter](h
 1. In Open Sound Meter, configure the audio interface, measurement microphone, and calibration.
 2. Choose the Wi-Fi icon and enable **Remote API Server**.
 3. Keep the Open Sound Meter and ChurchBoard computers on the same multicast-enabled network segment.
-4. In ChurchBoard Setup, enable **Open Sound Meter monitoring**.
+4. In **Setup & modules**, open **Open Sound Meter** and enable monitoring.
 5. Select the measurement source, report weighting, and Fast or Slow response.
 6. Optionally enable downloadable SPL graphs and Planning Center item averages.
 7. Choose **Test OSM connection**, then add an **Open Sound Meter** widget to the desired board.
@@ -160,9 +162,9 @@ ChurchBoard displays Open Sound Meter's selected level after applying the same S
 Restream monitoring shows whether a broadcast is live or upcoming, its elapsed time and available viewer count, and the state of each configured destination.
 
 1. Create a Restream API application and copy its **Client ID** and **Client Secret**.
-2. Add the Redirect URI displayed in ChurchBoard Setup. It follows the current HTTP/HTTPS origin and configured port.
+2. Add the Redirect URI displayed in the Restream module configuration. It follows the current HTTP/HTTPS origin and configured port.
 3. Grant only the read scopes needed for channels, streams/events, and viewer analytics.
-4. In ChurchBoard Setup, enable **Restream monitoring** and enter both credentials.
+4. In **Setup & modules**, open **Restream**, enable monitoring, and enter both credentials.
 5. Choose **Save & connect Restream**, authorize the account, and then test the connection.
 6. Add a **Restream livestream** widget to any dashboard that needs broadcast visibility.
 
@@ -186,19 +188,23 @@ ChurchBoard can monitor OBS Studio through its built-in WebSocket server without
 
 1. In OBS, open **Tools → WebSocket Server Settings**.
 2. Enable the WebSocket server, set a strong password, and note the port (normally `4455`).
-3. In ChurchBoard Setup, enable **OBS Studio monitoring** and enter the OBS computer's LAN address, port, and password.
+3. In **Setup & modules**, open **OBS Studio**, enable monitoring, and enter the OBS computer's LAN address, port, and password.
 4. Set the dropped-frame warning threshold. Optionally provide a browser-readable preview-image URL if another tool publishes one; OBS WebSocket itself does not provide a live preview image.
 5. Save, then add an **OBS Studio** widget to an operator dashboard.
 
 The widget reports connection, streaming and recording state, elapsed time, output bitrate/statistics, dropped frames, and the configured preview. Keep OBS and ChurchBoard on the same trusted production network and do not expose the WebSocket port to the internet.
 
-## 13. Configure the web server
+## 13. Add NDI video and Producer intercom
 
-Open **Setup → Web server** to change the listening port or enable direct HTTPS. Supply both the certificate and private-key paths. Restart ChurchBoard after saving. The page will then load using the configured `http://` or `https://` address; desktop and tray launch actions follow the same scheme and port.
+NDI video widgets discover an advertised source name and show its program image without requiring NDI Tools. ChurchBoard auto-detects the separately licensed NDI runtime from a standard SDK installation or from a custom SDK-root path. The Producer workspace can also join one or more ChurchBoard-hosted LiveKit audio party lines with push-to-talk, latch-open, and administrator mute-all—there are no external server credentials to configure. See **[NDI video and Producer intercom](NDI_AND_INTERCOM.md)** for the direct SDK download, installation, discovery diagnostics, HTTPS, and intercom network requirements.
+
+## 14. Configure the web server
+
+Open **Setup → Web server** to change the listening port or enable direct HTTPS. The primary port hosts dashboards and configuration. Enable the separate Producer listener to expose only sign-in, checklists, locally mirrored resources, and Producer tools to volunteers; it defaults to port 80 and rejects dashboard/editor/setup routes. Supply both the certificate and private-key paths. Restart ChurchBoard after saving. Both listeners then use the configured `http://` or `https://` scheme; desktop and tray launch actions follow the primary scheme and port.
 
 Ports range from 1–65535. Port 80 is accepted, but macOS and Linux normally restrict ports below 1024. A reverse proxy on 80/443 is preferable to running ChurchBoard with elevated privileges. Keep the service on a trusted network and never commit the TLS private key.
 
-## 14. Open displays
+## 15. Open displays
 
 Each dashboard has its own **Background color** picker at the top of the editor. The dashboard background, translucent liquid-glass widget surfaces, reflections, borders, and interface accents follow that color. Operational mic and SPL states remain green, yellow, or red so warnings are still immediately recognizable.
 

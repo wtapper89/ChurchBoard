@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <title>Setup &amp; Modules · ChurchBoard</title>
+  <link rel="icon" type="image/png" href="/static/churchboard-icon.png">
+  <link rel="stylesheet" href="/static/style.css">
+  <link rel="stylesheet" href="/static/modules.css">
+</head>
+<body class="modules-page">
+  <header class="topbar">
+    <a class="brand" href="/desktop"><img src="/static/churchboard-icon.png" alt="">ChurchBoard</a>
+    <nav class="module-nav"><a href="/desktop">Boards</a><a class="active" href="/modules">Setup &amp; modules</a><a href="/producer">Producer</a></nav>
+  </header>
+  <main class="modules-shell">
+    <section class="modules-hero glass">
+      <div><p class="eyebrow">CHURCHBOARD 2</p><h1>Setup &amp; modules</h1><p>Set ChurchBoard’s core behavior here, then add and configure each integration from its own module card. Required modules are added automatically.</p></div>
+      <div class="module-summary" id="module-summary"><strong>—</strong><span>modules installed</span></div>
+    </section>
+    <section class="core-setup glass" aria-labelledby="core-setup-title">
+      <div class="core-setup-heading"><div><p class="eyebrow">CORE</p><h2 id="core-setup-title">ChurchBoard settings</h2><p>These settings belong to ChurchBoard itself. Integration-specific choices live inside the module cards below.</p></div><button id="core-settings-save" class="button" type="button">Save core settings</button></div>
+      <div id="core-settings-fields" class="core-settings-grid"><p class="muted">Loading core settings…</p></div>
+      <p id="core-settings-status" class="form-status" role="status"></p>
+    </section>
+    <div class="module-list-heading"><div><p class="eyebrow">INTEGRATIONS &amp; FEATURES</p><h2>Modules</h2></div><p>Choose <strong>Manage</strong> to open that module’s complete setup.</p></div>
+    <section class="module-toolbar">
+      <label class="module-search">Find a module<input id="module-search" type="search" placeholder="Planning Center, NDI, intercom…"></label>
+      <label>Category<select id="module-category"><option value="">All categories</option></select></label>
+      <label class="module-toggle"><input id="module-installed-only" type="checkbox"><span>Installed only</span></label>
+      <button id="module-refresh" class="button secondary" type="button">Check for module updates</button>
+    </section>
+    <p id="module-status" class="form-status" role="status"></p>
+    <div id="module-groups" class="module-groups"><p class="muted">Loading modules…</p></div>
+  </main>
+  <dialog id="module-details" class="module-dialog">
+    <div class="module-dialog-heading"><div><p class="eyebrow" id="module-detail-vendor"></p><h2 id="module-detail-name"></h2></div><button id="module-detail-close" class="icon-button" type="button" aria-label="Close">×</button></div>
+    <p id="module-detail-description"></p>
+    <div id="module-detail-dependencies"></div>
+    <section><h3>Setup guide</h3><ol id="module-detail-setup" class="module-setup-list"></ol></section>
+    <section id="module-detail-contracts-section"><h3>Works with other modules through</h3><div id="module-detail-contracts" class="module-contracts"></div></section>
+    <section id="module-detail-widgets-section"><h3>Pages and widgets</h3><div id="module-detail-widgets" class="module-capabilities"></div></section>
+    <section id="module-detail-configuration"><div class="module-configuration-heading"><div><h3>Configuration</h3><p>These settings are owned by this module.</p></div></div><div id="module-configuration"><p class="muted">Loading configuration…</p></div><p id="module-configuration-status" class="form-status" role="status"></p></section>
+    <div class="dialog-actions" id="module-detail-actions"></div>
+  </dialog>
+  <script src="/static/common.js"></script>
+  <script src="/static/module-settings.js"></script>
+  <script src="/static/modules.js"></script>
+</body>
+</html>

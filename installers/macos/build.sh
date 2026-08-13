@@ -25,6 +25,11 @@ PYTHON_BIN="$(find_python)"
 .build-venv/bin/pip install -r requirements.txt -r build-requirements.txt
 .build-venv/bin/python packaging/generate_brand_assets.py
 .build-venv/bin/python packaging/collect_licenses.py
+if [[ -z "${CHURCHBOARD_PRODMESH_RTA_BUNDLE:-}" ]]; then
+  for candidate in "$PROJECT_DIR/build/prodmesh-rta/ProdMeshRemoteRTA.app" "$PROJECT_DIR/vendor/prodmesh-rta/ProdMeshRemoteRTA.app"; do
+    if [[ -d "$candidate" ]]; then export CHURCHBOARD_PRODMESH_RTA_BUNDLE="$candidate"; break; fi
+  done
+fi
 .build-venv/bin/pyinstaller packaging/ChurchBoard.spec --noconfirm --clean
 
 VERSION="$("$PYTHON_BIN" -c 'from app.version import __version__; print(__version__)')"
@@ -74,11 +79,16 @@ fi
 /usr/bin/xattr -cr "$STAGED_APP"
 /usr/bin/find "$STAGED_APP" -name '._*' -delete
 
+HTTPS_INSTALLER="$PACKAGE_STAGE/Enable HTTPS.command"
+/usr/bin/ditto "$PROJECT_DIR/installers/macos/Enable HTTPS.command" "$HTTPS_INSTALLER"
+/bin/chmod +x "$HTTPS_INSTALLER"
+
 .build-venv/bin/dmgbuild \
   -s "$PROJECT_DIR/packaging/dmg-settings.py" \
   -D "app=$STAGED_APP" \
   -D "background=$PROJECT_DIR/packaging/assets/dmg-background.png" \
   -D "icon=$PROJECT_DIR/packaging/assets/ChurchBoard.icns" \
+  -D "https_installer=$HTTPS_INSTALLER" \
   "ChurchBoard ${VERSION}" "$PACKAGE_STAGE/ChurchBoard.dmg"
 COPYFILE_DISABLE=1 /bin/cp "$PACKAGE_STAGE/ChurchBoard.dmg" "$DMG_PATH"
 

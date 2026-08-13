@@ -19,7 +19,7 @@ If ChurchBoard runs on a non-default port, replace `8040` in the Redirect URI wi
 
 ## 2. Authorize ChurchBoard
 
-1. Open ChurchBoard Setup at `http://127.0.0.1:8040/admin` on the ChurchBoard computer.
+1. Open **Setup & modules** at `http://127.0.0.1:8040/modules` on the ChurchBoard computer, then choose **Restream**.
 2. Enable **Restream monitoring**.
 3. Paste the Client ID and Client Secret.
 4. Choose **Save & connect Restream**.

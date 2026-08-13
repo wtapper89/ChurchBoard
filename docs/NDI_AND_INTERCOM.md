@@ -4,7 +4,7 @@ These beta features are optional. ChurchBoard continues to run normally when nei
 
 ## NDI® video
 
-ChurchBoard dynamically loads the NDI runtime and discovers sources on the production network. It does not require NDI Tools. In **Setup → NDI video**, enable NDI, select **Save & find NDI sources**, then add an **NDI video** widget and choose the advertised source name.
+ChurchBoard dynamically loads the NDI runtime and discovers sources on the production network. It does not require NDI Tools. In **Setup & modules → NDI video**, enable NDI, select **Save & find NDI sources**, then add an **NDI video** widget and choose the advertised source name. The source name is used for configuration and accessibility but is not overlaid on the clean video preview.
 
 ### Install the NDI SDK
 

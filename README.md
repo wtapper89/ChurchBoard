@@ -8,9 +8,7 @@
 
 ChurchBoard is a cross-platform production dashboard for churches. It combines Planning Center schedules and people, ProPresenter slides and service flow, Shure QLX-D/ULX-D/SLX-D and Sennheiser EW-DX microphone telemetry, Open Sound Meter and ProdMesh RTA levels, ShowXpress/TLC lighting controls, OBS Studio health, and Restream broadcast status in configurable displays for the stage, green room, audio booth, and production team.
 
-ChurchBoard 1.4 adds a mobile-friendly Producer workspace with organization accounts and roles, campuses, Planning Center position checklists and tagged-media resources, completion tracking, portable dashboard layouts, configurable HTTP/HTTPS, and a redesigned widget editor. See the [Producer workspace guide](docs/PRODUCER.md).
-
-The private **ChurchBoard 2 beta branch** adds a Companion-style module manager, dependency-aware integration installation, module-owned page/widget hooks, automatic per-service-time rosters, a restricted volunteer-only listener, offline-mirrored Planning Center resources, optional NDI® video, ProdMesh Remote RTA, ShowXpress/TLC lighting control, and a ChurchBoard-hosted LiveKit Producer party-line intercom. See [ChurchBoard 2 modules](docs/MODULES.md). These features remain private while they are field-tested; the installer links below continue to point to the stable release.
+ChurchBoard 2 adds a mobile-friendly Producer workspace, a Companion-style module manager, automatic per-service-time rosters, locally mirrored Planning Center resources, optional NDI® video, native WebSocket ProdMesh RTA rendering, ShowXpress/TLC lighting control, and a ChurchBoard-hosted LiveKit Producer party-line intercom. See the [Producer workspace guide](docs/PRODUCER.md) and [ChurchBoard modules](docs/MODULES.md).
 
 ## Watch the setup and demo video
 
@@ -58,26 +56,28 @@ Choose your computer and click its download link:
 
 | Your computer | Download |
 | --- | --- |
-| **Windows 10 or 11** | **[Download the Windows installer (.exe)](https://github.com/wtapper89/ChurchBoard/releases/latest/download/ChurchBoard-1.4.0-Windows-x64-Setup.exe)** |
-| **Mac with Apple silicon** — M1 or newer | **[Download the Apple silicon Mac disk image (.dmg)](https://github.com/wtapper89/ChurchBoard/releases/latest/download/ChurchBoard-1.4.0-macOS-arm64.dmg)** |
-| **Mac with an Intel processor** | **[Download the Intel Mac disk image (.dmg)](https://github.com/wtapper89/ChurchBoard/releases/latest/download/ChurchBoard-1.4.0-macOS-x86_64.dmg)** |
-| **Ubuntu or Debian Linux** | **[Download the Linux installer (.deb)](https://github.com/wtapper89/ChurchBoard/releases/latest/download/ChurchBoard-1.4.0-Linux-amd64.deb)** |
-| **Other 64-bit desktop Linux** | **[Download the portable Linux package (.tar.gz)](https://github.com/wtapper89/ChurchBoard/releases/latest/download/ChurchBoard-1.4.0-Linux-x86_64.tar.gz)** |
+| **Windows 10 or 11** | **[Download the Windows installer (.exe)](https://github.com/wtapper89/ChurchBoard/releases/latest/download/ChurchBoard-2.0.0-Windows-x64-Setup.exe)** |
+| **Mac with Apple silicon** — M1 or newer | **[Download the Apple silicon Mac disk image (.dmg)](https://github.com/wtapper89/ChurchBoard/releases/latest/download/ChurchBoard-2.0.0-macOS-arm64.dmg)** |
+| **Mac with an Intel processor** | **[Download the Intel Mac disk image (.dmg)](https://github.com/wtapper89/ChurchBoard/releases/latest/download/ChurchBoard-2.0.0-macOS-x86_64.dmg)** |
+| **Ubuntu or Debian Linux** | **[Download the Linux installer (.deb)](https://github.com/wtapper89/ChurchBoard/releases/latest/download/ChurchBoard-2.0.0-Linux-amd64.deb)** |
+| **Other 64-bit desktop Linux** | **[Download the portable Linux package (.tar.gz)](https://github.com/wtapper89/ChurchBoard/releases/latest/download/ChurchBoard-2.0.0-Linux-x86_64.tar.gz)** |
 
 Not sure which Mac you have? Choose **Apple menu → About This Mac**. If it says **Chip**, use Apple silicon. If it says **Processor**, use Intel.
 
 **Raspberry Pi:** jump to the [one-command Raspberry Pi installer](#raspberry-pi).
 
-[View all v1.4.0 downloads and release notes](https://github.com/wtapper89/ChurchBoard/releases/tag/v1.4.0)
+[View all v2.0.0 downloads and release notes](https://github.com/wtapper89/ChurchBoard/releases/tag/v2.0.0)
 
-### What's new in 1.4.0
+### What's new in 2.0.0
 
 - Producer accounts with Admin, Editor, and Volunteer roles; optional passwords; editable campuses and users; local administrator recovery; and easier Planning Center person matching.
 - Position-based, versioned checklists and resources, including Planning Center tagged media that opens inside ChurchBoard.
 - Portable dashboard export/import, a categorized widget palette, modal settings, always-visible editor buttons, and direct drag resizing.
 - Configurable listening port and direct HTTPS certificate support with mobile-friendly dashboards, editing, and Producer workflows.
 - New livestream, OBS, ProPresenter control, timers, and sermon-notes widgets with responsive sizing.
-- The ProPresenter Playlist can show rendered previews or slide text, follows repeated arrangements correctly, and keeps controls and auto-scroll configurable per board.
+- The ProPresenter Playlist can show rendered previews or slide text, follows repeated arrangements correctly, keeps controls and auto-scroll configurable per board, and triggers the exact numbered cue selected by the operator.
+- The unified module manager owns integration setup and dependencies, including Planning Center, ProPresenter, wireless microphones, NDI, ProdMesh RTA, lighting, OBS, streaming, and Producer intercom.
+- Automatic service-time rosters, locally mirrored resources, a restricted volunteer listener, native WebSocket RTA rendering, and per-item service audio history are included.
 
 ## Install
 

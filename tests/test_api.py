@@ -89,7 +89,8 @@ class ApiTests(unittest.TestCase):
     def test_module_manager_and_dependency_lifecycle(self):
         page = self.client.get("/modules")
         self.assertEqual(page.status_code, 200)
-        self.assertIn("CHURCHBOARD 2 PRIVATE BETA", page.text)
+        self.assertIn("CHURCHBOARD 2", page.text)
+        self.assertNotIn("PRIVATE BETA", page.text)
         catalog = self.client.get("/api/modules")
         self.assertEqual(catalog.status_code, 200)
         self.assertIn("planning-center", {item["id"] for item in catalog.json()["items"]})

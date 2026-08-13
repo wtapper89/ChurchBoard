@@ -1,6 +1,6 @@
 # ChurchBoard 2 modules
 
-ChurchBoard 2 is a private beta of a module-based production platform. Open **Setup & modules** from the ChurchBoard home page to manage ChurchBoard's core settings and its integrations in one place. Adding a module also adds every required module; for example, **ProPresenter → Services LIVE** installs both the Planning Center and ProPresenter modules before enabling their interaction.
+ChurchBoard 2 is a module-based production platform. Open **Setup & modules** from the ChurchBoard home page to manage ChurchBoard's core settings and its integrations in one place. Adding a module also adds every required module; for example, **ProPresenter → Services LIVE** installs both the Planning Center and ProPresenter modules before enabling their interaction.
 
 Each module manifest keeps these concerns together:
 
@@ -15,7 +15,7 @@ This makes a page the output of installed modules instead of a hard-coded list i
 
 ## Current modules
 
-The private beta includes modules for ChurchBoard pages, Planning Center Services, ProPresenter, ProPresenter-to-Services-LIVE interaction, Shure Wireless, Sennheiser Wireless, Open Sound Meter, [ProdMesh Remote RTA](PRODMESH_RTA.md), ShowXpress/TheLightingController, OBS Studio, Restream, multi-provider livestream monitoring, NDI video, Producer, and Producer Intercom.
+ChurchBoard includes modules for ChurchBoard pages, Planning Center Services, ProPresenter, ProPresenter-to-Services-LIVE interaction, Shure Wireless, Sennheiser Wireless, Open Sound Meter, [ProdMesh Remote RTA](PRODMESH_RTA.md), ShowXpress/TheLightingController, OBS Studio, Restream, multi-provider livestream monitoring, NDI video, Producer, and Producer Intercom.
 
 The **Interactions** category is intentional. An interaction that combines two sources belongs in a small bridge module which consumes published contracts, rather than either source reaching into the other's implementation. For example:
 

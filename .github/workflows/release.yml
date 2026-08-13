@@ -91,7 +91,10 @@ jobs:
           choco install cmake ninja -y --no-progress
           git clone https://github.com/jbeale/prodmesh-rta.git "$env:RUNNER_TEMP\prodmesh-rta"
           git -C "$env:RUNNER_TEMP\prodmesh-rta" checkout $env:PRODMESH_RTA_REF
-          $vsDevCmd = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\2022\Enterprise\Common7\Tools\VsDevCmd.bat'
+          $vsWhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\vswhere.exe'
+          $vsInstall = & $vsWhere -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
+          if (-not $vsInstall) { throw 'Visual Studio C++ toolchain was not found.' }
+          $vsDevCmd = Join-Path $vsInstall 'Common7\Tools\VsDevCmd.bat'
           cmd /c "`"$vsDevCmd`" -arch=x64 -host_arch=x64 && cmake -S `"$env:RUNNER_TEMP\prodmesh-rta`" -B `"$env:RUNNER_TEMP\prodmesh-rta\build`" -G Ninja -DCMAKE_PREFIX_PATH=`"$env:QT_ROOT_DIR`" -DCMAKE_BUILD_TYPE=Release && cmake --build `"$env:RUNNER_TEMP\prodmesh-rta\build`""
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           windeployqt --release "$env:RUNNER_TEMP\prodmesh-rta\build\ProdMeshRemoteRTA.exe"

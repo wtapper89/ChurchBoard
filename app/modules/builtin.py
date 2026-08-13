@@ -7,11 +7,11 @@ def widget(widget_type: str, name: str, category: str, width: int, height: int, 
 
 BUILTIN_MODULES = [
     {
-        "id": "churchboard-core", "name": "ChurchBoard Pages", "vendor": "ChurchBoard", "version": "2.0.0",
+        "id": "churchboard-core", "name": "ChurchBoard Pages", "vendor": "ChurchBoard", "version": "2.1.0",
         "description": "Dashboard pages, clocks, custom content, layouts, and the module host.", "category": "Core",
         "core": True, "default_installed": True, "dependencies": [],
         "provides": ["churchboard.pages/v2", "churchboard.module-host/v2"], "consumes": [],
-        "widgets": [widget("clock", "Clock", "Service & timing", 3, 2), widget("text", "Custom text", "Content", 4, 2, text="Custom text")],
+        "widgets": [widget("clock", "Clock", "Service & timing", 3, 2), widget("board_navigation", "Board navigation", "Content", 4, 2), widget("text", "Custom text", "Content", 4, 2, text="Custom text")],
         "pages": [{"id": "boards", "name": "Boards", "path": "/desktop"}],
         "setup": [{"title": "Ready to use", "text": "This is the core page host and cannot be removed."}],
         "frontend": {"renderer": "legacy-adapter"},
@@ -87,9 +87,9 @@ BUILTIN_MODULES = [
         "configuration_path": "/modules#open-sound-meter", "documentation": "/docs/OPEN_SOUND_METER.md", "frontend": {"renderer": "legacy-adapter"},
     },
     {
-        "id": "prodmesh-rta", "name": "ProdMesh Remote RTA", "vendor": "Justin Beale / ProdMesh", "version": "1.0.0",
+        "id": "prodmesh-rta", "name": "ProdMesh Remote RTA", "vendor": "Justin Beale / ProdMesh", "version": "1.1.0",
         "description": "Self-hosted live SPL, program loudness, signal health, and 31-band RTA—with no separate analyzer installation—or connect another ProdMesh computer.", "category": "Audio measurement",
-        "settings_key": "prodmesh_rta", "dependencies": [], "provides": ["churchboard.spl/v1", "churchboard.rta/v1"], "consumes": [],
+        "settings_key": "prodmesh_rta", "dependencies": [], "provides": ["churchboard.spl/v1", "churchboard.rta/v1"], "consumes": ["churchboard.timing/v1?"],
         "widgets": [widget("prodmesh_rta", "ProdMesh RTA", "Audio & streaming", 5, 4, display_mode="both", metric="fast_db")], "pages": [],
         "setup": [{"title": "Choose embedded or remote", "text": "Embedded mode is included with ChurchBoard and starts automatically. Remote mode connects to ProdMesh on another computer."}, {"title": "Choose and calibrate the input", "text": "For embedded mode, open audio and calibration settings, allow microphone access, and select the measurement mic or interface channel."}],
         "configuration_path": "/modules#prodmesh-rta", "documentation": "/docs/PRODMESH_RTA.md", "frontend": {"renderer": "legacy-adapter"},
@@ -140,7 +140,7 @@ BUILTIN_MODULES = [
         "configuration_path": "/modules#ndi-video", "documentation": "/docs/NDI_AND_INTERCOM.md", "frontend": {"renderer": "legacy-adapter"},
     },
     {
-        "id": "producer", "name": "Producer", "vendor": "ChurchBoard", "version": "2.0.0",
+        "id": "producer", "name": "Producer", "vendor": "ChurchBoard", "version": "2.1.0",
         "description": "Mobile service workspace, accounts, roles, checklists, resources, campuses, and service-time-aware workflows.", "category": "Producer",
         "default_installed": True, "dependencies": ["planning-center"], "provides": ["churchboard.producer/v1", "churchboard.identity/v1"],
         "consumes": ["churchboard.service-plan/v1", "churchboard.people/v1", "churchboard.media/v1"], "widgets": [],

@@ -61,6 +61,7 @@ class RuntimeService:
         self._obs_key: tuple[Any, ...] | None = None
         self._prodmesh_client: ProdMeshRTAClient | None = None
         self._prodmesh_key: tuple[Any, ...] | None = None
+        self._last_prodmesh_report_at = 0.0
         self.prodmesh_host = HostedProdMeshRTA()
         self.media_cache = PlanningCenterMediaCache(store.path)
         self.ndi = NDIRuntime()
@@ -90,7 +91,24 @@ class RuntimeService:
     def record_spl_measurement(self, measurement: dict[str, Any], metric_key: str = "a_fast", metric_label: str = "A-weighted Fast") -> None:
         """Persist a normalized bridge reading against the current LIVE item."""
         state = self.state
-        self.spl_reports.record(measurement, state.get("service") or {}, (state.get("timing") or {}).get("current_item"), metric_key, metric_label)
+        timing = state.get("timing") or {}
+        self.spl_reports.record(measurement, state.get("service") or {}, timing.get("current_item"), metric_key, metric_label, timing=timing)
+
+    def record_prodmesh_measurement(self, measurement: dict[str, Any], state: dict[str, Any], clock: float) -> None:
+        """Store one ProdMesh sample per second against the active service item."""
+        if clock - self._last_prodmesh_report_at < 1.0:
+            return
+        timing = state.get("timing") or {}
+        item = timing.get("current_item")
+        service = state.get("service") or {}
+        if not service.get("id") or not item or not measurement.get("connected"):
+            return
+        program = str(measurement.get("mode") or "").casefold() == "program"
+        metric_key = "lufsS" if program else "fast_db"
+        metric_label = "Short-term loudness" if program else f"{str(measurement.get('weighting') or 'A')}-weighted Fast"
+        unit = "LUFS" if program else "dB SPL"
+        self.spl_reports.record(measurement, service, item, metric_key, metric_label, timing=timing, source="ProdMesh RTA", unit=unit)
+        self._last_prodmesh_report_at = clock
 
     def record_osm_measurement(self, measurement: dict[str, Any]) -> None:
         osm_settings = self.store.load()["settings"].get("open_sound_meter", {})
@@ -245,7 +263,10 @@ class RuntimeService:
         prodmesh_due = clock - self._last_refresh["prodmesh_rta"] >= max(.1, float(prodmesh_settings.get("refresh_seconds") or .25))
         if self._prodmesh_client.configured and (force or prodmesh_due):
             self._last_refresh["prodmesh_rta"] = clock
-            try: next_state["prodmesh_rta"] = {**await self._prodmesh_client.levels(), "host": self.prodmesh_host.status(prodmesh_settings)}
+            try:
+                next_state["prodmesh_rta"] = {**await self._prodmesh_client.levels(), "host": self.prodmesh_host.status(prodmesh_settings)}
+                if prodmesh_settings.get("reports_enabled", True):
+                    self.record_prodmesh_measurement(next_state["prodmesh_rta"], next_state, clock)
             except Exception as exc: next_state["prodmesh_rta"] = {"connected": False, "error": str(exc), "host": self.prodmesh_host.status(prodmesh_settings)}
         elif not self._prodmesh_client.configured:
             next_state["prodmesh_rta"] = {"connected": False, "error": "ProdMesh RTA is not enabled"}

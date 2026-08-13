@@ -5,6 +5,7 @@ const playlistScrollPositions=new Map();
 const playlistActiveKeys=new Map();
 const objectIds=new WeakMap();let nextObjectId=1;
 const slug=decodeURIComponent(location.pathname.split("/").pop());
+document.querySelector("#edit-board-button").href=`/editor/${encodeURIComponent(slug)}`;
 let dashboardFitFrame=0;
 function fitDashboardToViewport(){
   const root=document.querySelector("#dashboard");if(!root)return;

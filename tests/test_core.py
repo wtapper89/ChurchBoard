@@ -21,6 +21,7 @@ from app.modules.restream import RestreamClient
 from app.modules.runtime import RuntimeService
 from app.modules.prodmesh_rta import ProdMeshRTAClient
 from app.modules.prodmesh_host import HostedProdMeshRTA
+from app.modules.spl_reports import SPLReportStore
 from app.modules.thelightingcontroller import TheLightingControllerClient
 from app.store import ConfigStore
 
@@ -41,6 +42,18 @@ class ModuleIntegrationTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(result["connected"])
         self.assertEqual(result["fast_db"], 82.4)
         self.assertEqual(result["bands_db"], [61.2, 63.8])
+
+    def test_audio_history_separates_service_times_and_items(self):
+        with tempfile.TemporaryDirectory() as directory:
+            reports = SPLReportStore(Path(directory) / "samples.jsonl")
+            service = {"id": "plan-1", "title": "Sunday Worship"}
+            timing = {"service_time_id": "time-2", "service_time_name": "11:00 AM"}
+            reports.record({"fast_db": 78.0}, service, {"id": "song-1", "title": "Song"}, "fast_db", "A-weighted Fast", timing=timing, source="ProdMesh RTA", unit="dB SPL")
+            reports.record({"fast_db": 82.0}, service, {"id": "song-1", "title": "Song"}, "fast_db", "A-weighted Fast", timing=timing, source="ProdMesh RTA", unit="dB SPL")
+            self.assertEqual(reports.services()[0]["id"], "plan-1--time-2")
+            report = reports.report("plan-1--time-2")
+            self.assertEqual(report["items"][0]["average"], 80.0)
+            self.assertEqual(report["items"][0]["source"], "ProdMesh RTA")
 
     def test_embedded_prodmesh_host_starts_and_supervises_bundled_engine(self):
         host = HostedProdMeshRTA()

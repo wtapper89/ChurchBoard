@@ -27,7 +27,7 @@ Optional dependencies end in `?`. Wireless modules, for example, can provide mic
 
 ## Setup and updates
 
-Select a module's **Details** button for a short setup guide and its dependency list. Manual prerequisites are shown inline. The NDI module links directly to NDI's official SDK download, explains the standard install location, and then links to ChurchBoard's NDI configuration.
+Select a module's single **Manage** (or **View & add**) button for its setup, dependency list, and update controls. Manual prerequisites are shown inline. The NDI module links directly to NDI's official SDK download, explains the standard install location, and then links to ChurchBoard's NDI configuration.
 
 ChurchBoard 2 initially ships the reviewed module catalog with the application. The module manager tracks each installed module's version independently and applies newer bundled module versions when **Automatically apply bundled module updates** is enabled. This preserves a safe local beta while establishing the same per-module lifecycle needed for a signed remote module catalog later.
 

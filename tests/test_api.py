@@ -424,13 +424,16 @@ class ApiTests(unittest.TestCase):
         accepted = self.client.post("/api/integrations/osm/measurement", json={"laeq": 78.4, "peak": 92.1, "timestamp": "2026-08-05T12:00:00+00:00"})
         self.assertEqual(accepted.status_code, 202)
         services = self.client.get("/api/reports/services").json()["items"]
-        self.assertEqual(services[0]["id"], "demo")
-        csv_report = self.client.get("/api/reports/services/demo/spl-averages.csv")
+        self.assertEqual(services[0]["id"], "demo--demo-time")
+        csv_report = self.client.get("/api/reports/services/demo--demo-time/spl-averages.csv")
         self.assertEqual(csv_report.status_code, 200)
         self.assertIn("Worship", csv_report.text)
-        graph = self.client.get("/api/reports/services/demo/spl-graph.html")
+        graph = self.client.get("/api/reports/services/demo--demo-time/spl-graph.html")
         self.assertEqual(graph.status_code, 200)
         self.assertIn("78.4", graph.text)
+        report = self.client.get("/api/reports/services/demo--demo-time")
+        self.assertEqual(report.status_code, 200)
+        self.assertEqual(report.json()["items"][0]["title"], "Worship")
 
     def test_osm_remote_api_levels_packet_is_normalized(self):
         packet = b'{"api":"Open Sound Meter","host":"FOH-Mac","source":"source-123","objectName":"House SPL","message":"levels","data":{"A":{"Fast":-61.6,"Slow":-63.9},"C":{"Fast":-58.2,"Slow":-59.1},"Z":{"Fast":-55.8}}}'

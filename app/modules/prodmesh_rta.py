@@ -30,6 +30,7 @@ class ProdMeshRTAClient:
             "centers_hz": rta.get("centers_hz") or [],
             "bands_db": rta.get("bands_db") or [],
             "peaks_db": rta.get("peaks_db") or [],
+            "cal_db": rta.get("cal_db", spl.get("cal_db")),
         }
 
     async def close(self) -> None:

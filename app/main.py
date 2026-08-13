@@ -227,7 +227,7 @@ async def prevent_stale_dashboard_assets(request: Request, call_next):
             return RedirectResponse("/producer", status_code=303)
         allowed_page = path in {"/login", "/producer"} or path.startswith("/static/")
         allowed_api = (
-            path.startswith(("/api/auth/", "/api/producer/", "/api/users", "/api/campuses"))
+            path.startswith(("/api/auth/", "/api/producer/", "/api/users", "/api/campuses", "/api/reports/"))
             or path in {
                 "/api/app-info", "/api/organization/auth", "/api/active-plan",
                 "/api/active-service-time", "/api/runtime/refresh",
@@ -1167,17 +1167,26 @@ async def ndi_snapshot(source: str, request: Request) -> Response:
 
 @app.get("/api/reports/services")
 async def list_spl_report_services(request: Request) -> dict:
+    require_role(request, "admin", "editor")
     return {"items": request.app.state.runtime.spl_reports.services()}
+
+
+@app.get("/api/reports/services/{service_id}")
+async def get_audio_report(service_id: str, request: Request) -> dict:
+    require_role(request, "admin", "editor")
+    return request.app.state.runtime.spl_reports.report(service_id)
 
 
 @app.get("/api/reports/services/{service_id}/spl-averages.csv")
 async def download_spl_averages(service_id: str, request: Request) -> PlainTextResponse:
+    require_role(request, "admin", "editor")
     content = request.app.state.runtime.spl_reports.csv(service_id)
     return PlainTextResponse(content, media_type="text/csv", headers={"Content-Disposition": f'attachment; filename="churchboard-{service_id}-spl-averages.csv"'})
 
 
 @app.get("/api/reports/services/{service_id}/spl-graph.html")
 async def download_spl_graph(service_id: str, request: Request) -> Response:
+    require_role(request, "admin", "editor")
     content = request.app.state.runtime.spl_reports.graph_html(service_id)
     return Response(content, media_type="text/html", headers={"Content-Disposition": f'attachment; filename="churchboard-{service_id}-spl-graph.html"'})
 

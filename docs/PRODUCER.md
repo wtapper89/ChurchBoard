@@ -30,6 +30,8 @@ For volunteers, choose their name from the **Planning Center person** list or us
 
 The active service chooser at the top of Producer lists all plans currently returned by the configured Planning Center service types. Select a dated plan to lock ChurchBoard to it, or choose **Automatic service selection** to use the configured open/close timing window.
 
+Admins and editors also have an **Audio history** tab. When ProdMesh RTA or Open Sound Meter reporting is enabled, ChurchBoard stores readings locally and groups them by Planning Center service time and active item. This keeps separate services separate even when they share the same plan. The tab shows a graph and minimum, average, and maximum for every song or item, with downloadable graph and CSV copies.
+
 Checklist templates use the position keys returned by the configured Planning Center Services plan. A template can therefore follow whoever is scheduled as `Band · Vox 1`, `Production · Audio`, or another selected position instead of being tied permanently to one person.
 
 ## Position checklists and resources
@@ -47,6 +49,8 @@ The Personal Access Token user must be able to read Services Media and its tags.
 Use **Export layouts** from the desktop control page to back up all dashboards, or export the open layout from its editor. **Import layout** validates the file before storing it; a conflicting slug or name is preserved by assigning the imported dashboard a new one. Treat exports as configuration files and review operational details before sharing them.
 
 The editor palette groups widgets into Service & timing, Planning Center, ProPresenter, Audio & streaming, and Content. Search filters the list. Click the always-visible **Edit** button in a widget's upper-right corner or right-click it to open settings in a modal; the old permanent right sidebar has been removed. Drag a widget to move it, or drag its blue right edge, bottom edge, or corner to resize it. Size choices use useful labels such as compact, comfortable, and large where practical instead of raw pixels.
+
+Every displayed board has a one-click **Edit** button beside the fullscreen and menu controls. The **Board navigation** widget adds touch-friendly links to all boards directly inside a layout, which is useful for operator pages and tablets.
 
 ## HTTPS
 

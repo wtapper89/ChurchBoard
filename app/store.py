@@ -63,7 +63,7 @@ def default_data() -> dict[str, Any]:
                 "report_response": "Fast",
                 "source_id": "",
             },
-            "prodmesh_rta": {"enabled": False, "mode": "embedded", "host": "", "port": 8517, "refresh_seconds": 0.25},
+            "prodmesh_rta": {"enabled": False, "mode": "embedded", "host": "", "port": 8517, "refresh_seconds": 0.25, "reports_enabled": True},
             "restream": {"enabled": False, "client_id": "", "client_secret": "", "access_token": "", "refresh_token": "", "access_token_expires_at": 0, "refresh_seconds": 5},
             "obs": {"enabled": False, "host": "127.0.0.1", "port": 4455, "password": "", "refresh_seconds": 0.5, "dropped_frames_threshold": 2, "preview_url": ""},
             "lighting": {"enabled": False, "host": "127.0.0.1", "port": 7348, "password": ""},

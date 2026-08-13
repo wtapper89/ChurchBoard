@@ -39,7 +39,7 @@ class ModuleRegistryTests(unittest.TestCase):
         installed["planning-center"]["version"] = "1.0.0"
         installed["planning-center"]["auto_update"] = False
         self.assertTrue(self.registry.reconcile(self.data))
-        self.assertEqual(installed["churchboard-core"]["version"], "2.0.0")
+        self.assertEqual(installed["churchboard-core"]["version"], "2.1.0")
         self.assertEqual(installed["planning-center"]["version"], "1.0.0")
 
     def test_frontend_catalog_declares_widget_owners(self):

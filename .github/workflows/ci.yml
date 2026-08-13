@@ -24,7 +24,8 @@ jobs:
           node --check app/static/common.js
           node --check app/static/display.js
           node --check app/static/editor.js
-          node --check app/static/admin.js
+          node --check app/static/module-settings.js
+          node --check app/static/modules.js
           node --check app/static/desktop.js
           node --check app/static/login.js
           node --check app/static/producer.js

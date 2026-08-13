@@ -65,6 +65,8 @@ class ApiTests(unittest.TestCase):
         self.assertIn('planSelectionInFlight', display_script)
         self.assertIn('event.key==="Escape"', display_script)
         self.assertIn("fitDashboardToViewport", display_script)
+        self.assertIn("connectProdMeshStream", display_script)
+        self.assertIn("/api/integrations/prodmesh-rta/stream", display_script)
         self.assertIn("--dashboard-scale", display_script)
         self.assertIn("resizeDashboardContent(document.querySelector(\"#dashboard\"))", display_script)
         common_script = self.client.get("/static/common.js").text

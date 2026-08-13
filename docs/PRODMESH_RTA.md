@@ -8,7 +8,7 @@ ChurchBoard can self-host the [ProdMesh Remote RTA](https://github.com/jbeale/pr
 4. Select **Save & test**. ChurchBoard starts and supervises the analyzer automatically whenever it runs.
 5. Edit a ChurchBoard page, add **ProdMesh RTA**, and choose a meter, RTA, or combined display.
 
-The widget uses ProdMesh's own live calibration ceiling and 80 dB RTA window, so its bands match the scale in the full ProdMesh program instead of appearing maxed out early.
+The widget uses ProdMesh's native `/api/stream` WebSocket rather than repeatedly requesting level snapshots. Complete analyzer frames are pushed through ChurchBoard to every open board at the analyzer's own update cadence. It also uses ProdMesh's live calibration ceiling and 80 dB RTA window, so its bands match the scale in the full ProdMesh program instead of appearing maxed out early. Older ProdMesh versions without the stream endpoint automatically fall back to the HTTP level endpoints.
 
 Keep **Store per-service audio history in Producer** enabled to record one sample per second. ChurchBoard associates each sample with the selected Planning Center plan, the specific service time, and the active item or song. Administrators and editors can open **Producer → Audio history** to compare the minimum, average, maximum, and level graph for every item. These recordings remain on the ChurchBoard computer and can also be downloaded as a graph or CSV.
 

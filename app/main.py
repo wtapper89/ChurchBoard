@@ -1070,6 +1070,28 @@ async def test_prodmesh_rta(request: Request) -> dict:
     finally: await client.close()
 
 
+@app.websocket("/api/integrations/prodmesh-rta/stream")
+async def prodmesh_rta_stream(websocket: WebSocket) -> None:
+    """Relay ProdMesh's native pushed frames to ChurchBoard browser widgets."""
+    await websocket.accept()
+    sequence = 0
+    active_client = None
+    try:
+        while True:
+            client = websocket.app.state.runtime._prodmesh_client
+            if client is None or not client.configured:
+                await websocket.send_json({"connected": False, "error": "ProdMesh RTA is not enabled", "transport": "websocket"})
+                await asyncio.sleep(1)
+                continue
+            if client is not active_client:
+                active_client = client
+                sequence = 0
+            sequence, frame = await client.wait_for_frame(sequence)
+            await websocket.send_json(frame)
+    except (WebSocketDisconnect, websockets.ConnectionClosed, RuntimeError):
+        return
+
+
 @app.get("/api/integrations/prodmesh-rta/status")
 async def prodmesh_rta_status(request: Request) -> dict:
     require_role(request, "admin", "editor")

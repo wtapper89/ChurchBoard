@@ -1,4 +1,4 @@
-let dashboard,lastState={},serverInstance="",refreshInFlight=false,planOptionsKey="",serviceTimeOptionsKey="",planSelectionInFlight=false,lastFullRefresh=0,compactEtag="",ppKeyboardInFlight=false;
+let dashboard,lastState={},serverInstance="",refreshInFlight=false,planOptionsKey="",serviceTimeOptionsKey="",planSelectionInFlight=false,lastFullRefresh=0,compactEtag="",ppKeyboardInFlight=false,prodmeshSocket=null,prodmeshReconnectTimer=0;
 const widgetRenderKeys=new Map();
 const orderScrollPositions=new Map();
 const playlistScrollPositions=new Map();
@@ -58,6 +58,7 @@ function mergeFullState(fresh){
   if(fresh.timing&&lastState.timing&&fresh.timing.service_items){
     fresh.timing.service_items=retainCachedValue(lastState.timing.service_items,fresh.timing.service_items);
   }
+  if(lastState.prodmesh_rta?.transport==="websocket"&&Number(lastState.prodmesh_rta.time_ms)>Number(fresh.prodmesh_rta?.time_ms||0))fresh.prodmesh_rta=lastState.prodmesh_rta;
   return fresh;
 }
 function mergeCompactState(fresh){
@@ -83,6 +84,7 @@ async function refresh(forceFull=false){
   }catch(error){console.error(error)}finally{refreshInFlight=false}
 }
 async function checkServerInstance(){try{const info=await api("/api/app-info");if(serverInstance&&serverInstance!==info.instance_id){location.reload();return}serverInstance=info.instance_id}catch(error){}}
+function connectProdMeshStream(){clearTimeout(prodmeshReconnectTimer);if(prodmeshSocket&&[WebSocket.CONNECTING,WebSocket.OPEN].includes(prodmeshSocket.readyState))return;const scheme=location.protocol==="https:"?"wss":"ws";prodmeshSocket=new WebSocket(`${scheme}://${location.host}/api/integrations/prodmesh-rta/stream`);prodmeshSocket.onmessage=event=>{try{const frame=JSON.parse(event.data),currentTime=Number(lastState.prodmesh_rta?.time_ms||0),frameTime=Number(frame.time_ms||0);if(frameTime&&frameTime<currentTime)return;lastState={...lastState,prodmesh_rta:frame};render()}catch(error){console.warn("Invalid ProdMesh stream frame",error)}};prodmeshSocket.onclose=()=>{prodmeshSocket=null;prodmeshReconnectTimer=setTimeout(connectProdMeshStream,1000)};prodmeshSocket.onerror=()=>prodmeshSocket?.close()}
 function render(){
   const root=document.querySelector("#dashboard"),widgets=dashboard.widgets||[],existing=new Map([...root.querySelectorAll(":scope > .widget")].map(element=>[String(element.dataset.widget),element])),activeIds=new Set(),timing=lastState.timing||{};
   let changed=false;
@@ -194,4 +196,4 @@ document.querySelector("#active-plan").addEventListener("change",async event=>{
 });
 document.querySelector("#active-service-time").addEventListener("change",async event=>{const select=event.currentTarget,status=document.querySelector("#active-service-time-status");select.disabled=true;status.textContent="Selecting service time…";try{lastState=await api("/api/active-service-time",{method:"PUT",body:JSON.stringify({id:select.value||null,plan_id:lastState.service?.id||null})});render();status.textContent="";setMenuOpen(false)}catch(error){status.textContent=error.message}finally{select.disabled=false;updateServiceTimes()}});
 api("/api/dashboards").then(data=>document.querySelector("#board-links").innerHTML=data.items.map(item=>`<div class="board-menu-row"><a class="board-menu-open" href="/display/${encodeURIComponent(item.slug)}">${escapeHtml(item.name)}</a><a class="board-menu-edit" href="/editor/${encodeURIComponent(item.slug)}" aria-label="Edit ${escapeHtml(item.name)}">Edit</a></div>`).join(""));
-checkServerInstance();loadBoard(); setInterval(refresh,150); setInterval(tickClocks,250);setInterval(checkServerInstance,5000);
+checkServerInstance();connectProdMeshStream();loadBoard(); setInterval(refresh,150); setInterval(tickClocks,250);setInterval(checkServerInstance,5000);

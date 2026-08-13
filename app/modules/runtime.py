@@ -260,7 +260,7 @@ class RuntimeService:
         if self._prodmesh_client is None or prodmesh_key != self._prodmesh_key:
             if self._prodmesh_client is not None: await self._prodmesh_client.close()
             self._prodmesh_client, self._prodmesh_key = ProdMeshRTAClient(effective_prodmesh_settings), prodmesh_key
-        prodmesh_due = clock - self._last_refresh["prodmesh_rta"] >= max(.1, float(prodmesh_settings.get("refresh_seconds") or .25))
+        prodmesh_due = clock - self._last_refresh["prodmesh_rta"] >= max(.08, float(prodmesh_settings.get("refresh_seconds") or .1))
         if self._prodmesh_client.configured and (force or prodmesh_due):
             self._last_refresh["prodmesh_rta"] = clock
             try:

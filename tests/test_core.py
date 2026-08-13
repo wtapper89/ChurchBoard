@@ -38,10 +38,21 @@ class ModuleIntegrationTests(unittest.IsolatedAsyncioTestCase):
             async def aclose(self): return None
         client = ProdMeshRTAClient({"enabled": True, "host": "10.0.0.8", "port": 8517})
         await client._client.aclose(); client._client = Http()
+        client._ensure_stream = lambda: None
         result = await client.levels()
         self.assertTrue(result["connected"])
         self.assertEqual(result["fast_db"], 82.4)
         self.assertEqual(result["bands_db"], [61.2, 63.8])
+        self.assertEqual(result["transport"], "http-fallback")
+
+    def test_prodmesh_native_stream_frame_keeps_complete_analyzer_payload(self):
+        payload = {"type": "levels", "time_ms": 1234, "mode": "program", "cal_db": 0, "fast_db": -18.2, "centers_hz": [31.5, 40], "bands_db": [-45.0, -22.3], "peaks_db": [-40.0, -20.0], "metrics": {"lufsS": -16.4}, "targets": [{"id": "lufsS", "lo": -18, "hi": -14}], "signal": {"state": "ok"}}
+        frame = ProdMeshRTAClient.normalize_stream_frame(payload)
+        self.assertEqual(frame["transport"], "websocket")
+        self.assertEqual(frame["bands_db"], [-45.0, -22.3])
+        self.assertEqual(frame["metrics"]["lufsS"], -16.4)
+        self.assertEqual(frame["targets"][0]["hi"], -14)
+        self.assertIsNone(ProdMeshRTAClient.normalize_stream_frame({"type": "event", "event": "alarm"}))
 
     def test_audio_history_separates_service_times_and_items(self):
         with tempfile.TemporaryDirectory() as directory:

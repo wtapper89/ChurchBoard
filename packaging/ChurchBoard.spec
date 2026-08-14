@@ -4,6 +4,7 @@ from pathlib import Path
 import os
 import shutil
 import sys
+from PyInstaller.utils.hooks import collect_data_files
 
 
 project = Path.cwd()
@@ -23,6 +24,7 @@ datas = [
     (str(project / "packaging" / "licenses" / "prodmesh-rta.LICENSE"), "legal/prodmesh-rta"),
     (str(project / "packaging" / "licenses" / "qt-LGPL-3.0-only.txt"), "legal/qt"),
 ]
+datas.extend(collect_data_files("certifi"))
 collected_licenses = project / "build" / "legal" / "third-party"
 if collected_licenses.is_dir():
     datas.append((str(collected_licenses), "legal/third-party"))

@@ -2,12 +2,23 @@ import hashlib
 import json
 import tempfile
 import unittest
+from unittest.mock import patch
 from pathlib import Path
 
 from app.modules.updates import ModulePackageManager, ModuleUpdateError
 
 
 class ModulePackageManagerTests(unittest.TestCase):
+    def test_request_uses_bundled_certificate_authorities(self):
+        with tempfile.TemporaryDirectory() as temp:
+            manager = ModulePackageManager(Path(temp))
+            response = unittest.mock.MagicMock()
+            response.__enter__.return_value.read.return_value = b"{}"
+            with patch("app.modules.updates.ssl.create_default_context") as context, patch("app.modules.updates.urllib.request.urlopen", return_value=response) as urlopen:
+                self.assertEqual(manager._request("https://example.test/catalog.json"), b"{}")
+            self.assertTrue(context.call_args.kwargs["cafile"].endswith("cacert.pem"))
+            self.assertIs(urlopen.call_args.kwargs["context"], context.return_value)
+
     def test_update_verifies_and_activates_files(self):
         with tempfile.TemporaryDirectory() as temp:
             manager = ModulePackageManager(Path(temp))

@@ -7,10 +7,13 @@ import importlib.util
 import json
 import os
 import shutil
+import ssl
 import tempfile
 import urllib.request
 from pathlib import Path
 from typing import Any
+
+import certifi
 
 
 DEFAULT_CATALOG_URL = "https://raw.githubusercontent.com/wtapper89/ChurchBoard/main/modules/catalog.json"
@@ -34,7 +37,8 @@ class ModulePackageManager:
         if token:
             request.add_header("Authorization", f"Bearer {token}")
         try:
-            with urllib.request.urlopen(request, timeout=8) as response:
+            trust = ssl.create_default_context(cafile=certifi.where())
+            with urllib.request.urlopen(request, timeout=8, context=trust) as response:
                 return response.read()
         except Exception as exc:
             raise ModuleUpdateError(f"Could not download module data: {exc}") from exc

@@ -7,11 +7,11 @@ def widget(widget_type: str, name: str, category: str, width: int, height: int, 
 
 BUILTIN_MODULES = [
     {
-        "id": "churchboard-core", "name": "ChurchBoard Pages", "vendor": "ChurchBoard", "version": "2.1.0",
+        "id": "churchboard-core", "name": "ChurchBoard Pages", "vendor": "ChurchBoard", "version": "2.2.0",
         "description": "Dashboard pages, clocks, custom content, layouts, and the module host.", "category": "Core",
         "core": True, "default_installed": True, "dependencies": [],
         "provides": ["churchboard.pages/v2", "churchboard.module-host/v2"], "consumes": [],
-        "widgets": [widget("clock", "Clock", "Service & timing", 3, 2), widget("board_navigation", "Board navigation", "Content", 4, 2), widget("text", "Custom text", "Content", 4, 2, text="Custom text")],
+        "widgets": [widget("clock", "Clock", "Service & timing", 3, 2), widget("board_navigation", "Board navigation", "Content", 4, 2, links=[]), widget("text", "Custom text", "Content", 4, 2, text="Custom text")],
         "pages": [{"id": "boards", "name": "Boards", "path": "/desktop"}],
         "setup": [{"title": "Ready to use", "text": "This is the core page host and cannot be removed."}],
         "frontend": {"renderer": "legacy-adapter"},
@@ -39,14 +39,15 @@ BUILTIN_MODULES = [
         "configuration_path": "/modules#planning-center", "documentation": "/docs/PLANNING_CENTER.md", "frontend": {"renderer": "legacy-adapter"},
     },
     {
-        "id": "propresenter", "name": "ProPresenter", "vendor": "Renewed Vision", "version": "2.0.0",
-        "description": "Current/next slides, rendered previews, playlists, timers, notes, and remote slide controls.", "category": "Presentation",
+        "id": "propresenter", "name": "ProPresenter", "vendor": "Renewed Vision", "version": "2.1.0",
+        "description": "Current/next slides, rendered previews, playlists, macros, timers, notes, and remote controls.", "category": "Presentation",
         "default_installed": True, "settings_key": "propresenter", "dependencies": [],
         "provides": ["churchboard.presentation/v1", "churchboard.presentation-control/v1"], "consumes": ["churchboard.service-plan/v1?"],
         "widgets": [
             widget("slides", "ProPresenter slides", "ProPresenter", 6, 4, show_notes=True, slide_mode="image", slide_layout="full", show_current=True, show_next=True, show_parts=True, show_slide_count=False),
             widget("playlist", "ProPresenter playlist", "ProPresenter", 6, 7, slide_mode="image", allow_remote_trigger=True, keyboard_control_default=False, density="comfortable", auto_scroll=True, active_border_color="#f5c400"),
             widget("pp_controls", "ProPresenter controls", "ProPresenter", 5, 3, allow_remote_trigger=True),
+            widget("pp_macros", "ProPresenter macros", "ProPresenter", 5, 4, macro_mode="all", macro_ids=[], allow_remote_trigger=True),
             widget("notes", "Slide notes", "ProPresenter", 4, 2), widget("propresenter_timers", "ProPresenter timers", "ProPresenter", 5, 3),
         ],
         "pages": [],

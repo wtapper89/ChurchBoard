@@ -48,9 +48,9 @@ The Personal Access Token user must be able to read Services Media and its tags.
 
 Use **Export layouts** from the desktop control page to back up all dashboards, or export the open layout from its editor. **Import layout** validates the file before storing it; a conflicting slug or name is preserved by assigning the imported dashboard a new one. Treat exports as configuration files and review operational details before sharing them.
 
-The editor palette groups widgets into Service & timing, Planning Center, ProPresenter, Audio & streaming, and Content. Search filters the list. Click the always-visible **Edit** button in a widget's upper-right corner or right-click it to open settings in a modal; the old permanent right sidebar has been removed. Drag a widget to move it, or drag its blue right edge, bottom edge, or corner to resize it. Size choices use useful labels such as compact, comfortable, and large where practical instead of raw pixels.
+The editor palette groups widgets into Service & timing, Planning Center, ProPresenter, Audio & streaming, and Content. Search filters the list. Hover over the board controls and choose **Edit** to keep the current live board on screen while the editing palette slides in from the left. Click the always-visible **Edit** button in a widget's upper-right corner or right-click it to open settings in a modal. Drag a widget to move it, or drag its blue right edge, bottom edge, or corner to resize it. Saving closes the editor drawer and returns to the live board without opening another page.
 
-Every displayed board has a one-click **Edit** button beside the fullscreen and menu controls. The **Board navigation** widget adds touch-friendly links to all boards directly inside a layout, which is useful for operator pages and tablets.
+Every displayed board has an **Edit** button beside the fullscreen and menu controls; on pointer-based computers these controls stay out of the way until that corner is hovered. The **Board navigation** widget adds touch-friendly links directly inside a layout. Its settings let you select only the destination boards that belong on that operator page, arrange them, and replace their displayed labels without renaming the boards themselves.
 
 ## HTTPS
 

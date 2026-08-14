@@ -61,7 +61,9 @@ class ApiTests(unittest.TestCase):
         self.assertNotIn('target="_blank"', editor.text)
         display_script = self.client.get("/static/display.js").text
         self.assertIn('class="board-menu-edit"', display_script)
-        self.assertIn('/editor/${encodeURIComponent(item.slug)}', display_script)
+        self.assertIn('/display/${encodeURIComponent(item.slug)}?edit=1', display_script)
+        self.assertIn("openInlineEditor", display_script)
+        self.assertIn('class="display-controls"', display.text)
         self.assertIn('planSelectionInFlight', display_script)
         self.assertIn('event.key==="Escape"', display_script)
         self.assertIn("fitDashboardToViewport", display_script)
@@ -318,6 +320,22 @@ class ApiTests(unittest.TestCase):
         self.assertIn("openWidgetSettings", script)
         self.assertIn("livestream-source-editor", editor)
         self.assertIn("setPointerCapture", script)
+
+    def test_macro_and_selected_board_navigation_widgets_are_available(self):
+        modules = self.client.get("/api/modules").json()["items"]
+        widgets = {widget["type"] for module in modules for widget in module.get("widgets", [])}
+        self.assertIn("pp_macros", widgets)
+        self.assertIn("board_navigation", widgets)
+        common = self.client.get("/static/common.js").text
+        editor = self.client.get("/static/editor.js").text
+        display = self.client.get("/static/display.js").text
+        self.assertIn("data-pp-macro", common)
+        self.assertIn("macro_mode", editor)
+        self.assertIn("data-board-choice", editor)
+        self.assertIn("data-board-destination", common)
+        self.assertIn("/api/integrations/propresenter/macro", display)
+        self.assertIn("board-navigation:${JSON.stringify(settings.links||[])}", display)
+        self.assertIn("initials-mark", common)
 
     def test_livestream_api_credentials_are_kept_out_of_public_dashboards(self):
         board = self.client.get("/api/dashboards/main").json()

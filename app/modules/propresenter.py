@@ -27,6 +27,8 @@ class ProPresenterClient:
         self._active_refreshed = 0.0
         self._playlist_refreshed = 0.0
         self._transport_refreshed = 0.0
+        self._macros_payload: list[dict[str, Any]] = []
+        self._macros_refreshed = 0.0
 
     @property
     def configured(self) -> bool:
@@ -69,6 +71,7 @@ class ProPresenterClient:
         clock = time.monotonic()
         fetch_active = not self._active_payload or clock - self._active_refreshed >= 0.25
         fetch_playlist = not self._playlist_payload or clock - self._playlist_refreshed >= 1.5
+        fetch_macros = not self._macros_refreshed or clock - self._macros_refreshed >= 2.0
         names = ["slide", "index"]
         requests = [
             self._http().get(f"{base}/v1/status/slide"),
@@ -82,21 +85,35 @@ class ProPresenterClient:
             requests.append(self._http().get(f"{base}/v1/playlist/active"))
             names.append("playlist_focused")
             requests.append(self._http().get(f"{base}/v1/playlist/focused"))
+        if fetch_macros:
+            names.append("macros")
+            requests.append(self._http().get(f"{base}/v1/macros"))
         responses = dict(zip(names, await asyncio.gather(*requests)))
         responses["slide"].raise_for_status()
-        slide = responses["slide"].json()
+        try:
+            slide_payload = responses["slide"].json() if getattr(responses["slide"], "status_code", 200) != 204 else {}
+        except (TypeError, ValueError):
+            slide_payload = {}
+        # ProPresenter returns JSON null for several presentation endpoints
+        # after Clear All/Clear Slide. That is a valid "nothing on air" state,
+        # not a lost API connection. Keep macros, timers and the playlist
+        # available while presenting empty Now/Next data.
+        slide = slide_payload if isinstance(slide_payload, dict) else {}
         index_response = responses["index"]
         index_payload = index_response.json() if index_response.is_success else 0
         active_response = responses.get("active")
         if active_response is not None and active_response.is_success:
-            self._active_payload = active_response.json()
+            active_payload = active_response.json()
+            self._active_payload = active_payload if isinstance(active_payload, dict) else {}
             self._active_refreshed = clock
         playlist_response = responses.get("playlist")
         if playlist_response is not None and playlist_response.is_success:
-            active_playlist = playlist_response.json()
+            active_playlist_payload = playlist_response.json()
+            active_playlist = active_playlist_payload if isinstance(active_playlist_payload, dict) else {}
             self._active_playlist_payload = active_playlist
             focused_response = responses.get("playlist_focused")
-            focused_playlist = focused_response.json() if focused_response is not None and focused_response.is_success else {}
+            focused_payload = focused_response.json() if focused_response is not None and focused_response.is_success else {}
+            focused_playlist = focused_payload if isinstance(focused_payload, dict) else {}
             # A presentation can be active without its playlist being focused.
             # For the operator browser, the focused playlist is the complete
             # ProPresenter list the operator is currently working from.
@@ -132,6 +149,11 @@ class ProPresenterClient:
                             self._playlist_presentation_details[uuid] = self._presentation_payload(payload)
                 self._playlist_details_key = presentation_uuids
                 self._playlist_details_refreshed = clock
+        macros_response = responses.get("macros")
+        if macros_response is not None and macros_response.is_success:
+            payload = macros_response.json()
+            self._macros_payload = self._normalize_macros(payload)
+            self._macros_refreshed = clock
         active = self._active_payload
         playlist_payload = self._playlist_payload
         current = slide.get("current") or {}
@@ -302,7 +324,42 @@ class ProPresenterClient:
                 for position, entry in enumerate(cue_entries)
             ],
             "playlist_presentations": playlist_presentations,
+            "macros": self._macros_payload,
         }
+
+    @staticmethod
+    def _normalize_macros(payload: Any) -> list[dict[str, Any]]:
+        rows = payload if isinstance(payload, list) else payload.get("macros", []) if isinstance(payload, dict) else []
+        result: list[dict[str, Any]] = []
+        for fallback_index, row in enumerate(rows):
+            if not isinstance(row, dict):
+                continue
+            identifier = row.get("id") if isinstance(row.get("id"), dict) else {}
+            uuid = str(identifier.get("uuid") or row.get("uuid") or "").strip()
+            name = str(identifier.get("name") or row.get("name") or "").strip()
+            if not uuid or not name:
+                continue
+            color = row.get("color") if isinstance(row.get("color"), dict) else {}
+            channels = []
+            for channel in ("red", "green", "blue"):
+                try:
+                    channels.append(max(0, min(255, round(float(color.get(channel, 0)) * 255))))
+                except (TypeError, ValueError):
+                    channels.append(0)
+            try:
+                index = int(identifier.get("index", row.get("index", fallback_index)))
+            except (TypeError, ValueError):
+                index = fallback_index
+            result.append({"id": uuid, "name": name, "index": index, "color": "#" + "".join(f"{value:02x}" for value in channels)})
+        return sorted(result, key=lambda item: (item["index"], item["name"].casefold()))
+
+    async def trigger_macro(self, macro_id: str) -> None:
+        macro_id = str(macro_id or "").strip()
+        if not re.fullmatch(r"[A-Za-z0-9-]+", macro_id):
+            raise ValueError("Invalid ProPresenter macro ID")
+        base = f"http://{self.settings.get('host', '127.0.0.1')}:{int(self.settings.get('port', 50001))}"
+        response = await self._http().get(f"{base}/v1/macro/{quote(macro_id, safe='')}/trigger")
+        response.raise_for_status()
 
     async def trigger_active_playlist_item(self, index: int) -> None:
         if index < 0 or index > 10000:

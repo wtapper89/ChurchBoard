@@ -1117,6 +1117,15 @@ class ProPresenterLiveSyncTests(unittest.IsolatedAsyncioTestCase):
 
 
 class ProPresenterTests(unittest.TestCase):
+    def test_macros_are_normalized_with_stable_ids_order_and_color(self):
+        macros = ProPresenterClient._normalize_macros([
+            {"id": {"uuid": "MACRO-B", "name": "Message", "index": 2}, "color": {"red": 0.5, "green": 0.25, "blue": 0.0}},
+            {"id": {"uuid": "MACRO-A", "name": "Walk In", "index": 0}, "color": {"red": 0.0, "green": 1.0, "blue": 0.5}},
+        ])
+        self.assertEqual([item["id"] for item in macros], ["MACRO-A", "MACRO-B"])
+        self.assertEqual(macros[0]["color"], "#00ff80")
+        self.assertEqual(macros[1]["name"], "Message")
+
     def test_planning_center_playlist_context_reads_item_title_and_index(self):
         context = ProPresenterClient._playlist_context({"presentation": {
             "playlist": {"uuid": "playlist-1", "name": "August 2, 2026"},
@@ -1387,6 +1396,53 @@ class ProPresenterTests(unittest.TestCase):
 
 
 class ProPresenterPollingTests(unittest.IsolatedAsyncioTestCase):
+    async def test_clear_all_keeps_macros_and_timers_available(self):
+        class FakeResponse:
+            def __init__(self, payload, status_code=200):
+                self.payload = payload
+                self.status_code = status_code
+                self.is_success = 200 <= status_code < 300
+
+            def json(self):
+                if self.status_code == 204:
+                    raise ValueError("empty response body")
+                return self.payload
+
+            def raise_for_status(self):
+                return None
+
+        class FakeHttp:
+            async def get(self, url):
+                if url.endswith("/v1/status/slide"):
+                    return FakeResponse(None, 204)
+                if url.endswith("/v1/presentation/slide_index"):
+                    return FakeResponse(None)
+                if url.endswith("/v1/presentation/active"):
+                    return FakeResponse(None)
+                if url.endswith("/v1/playlist/active") or url.endswith("/v1/playlist/focused"):
+                    return FakeResponse(None)
+                if url.endswith("/v1/macros"):
+                    return FakeResponse([{
+                        "id": {"uuid": "MACRO-1", "name": "Message", "index": 0},
+                        "color": {"red": 0.2, "green": 0.4, "blue": 0.6},
+                    }])
+                if url.endswith("/v1/timers/current"):
+                    return FakeResponse([{
+                        "id": {"uuid": "TIMER-1", "name": "Message Timer", "index": 0},
+                        "time": "00:29:59",
+                        "state": "running",
+                    }])
+                return FakeResponse({})
+
+        client = ProPresenterClient({"enabled": True, "host": "127.0.0.1", "port": 53528})
+        client._client = FakeHttp()
+        status = await client.status()
+        self.assertTrue(status["connected"])
+        self.assertEqual(status["current"]["text"], "")
+        self.assertEqual(status["macros"][0]["name"], "Message")
+        self.assertEqual(status["timers"][0]["name"], "Message Timer")
+        self.assertEqual(status["timers"][0]["time"], "00:29:59")
+
     async def test_thumbnail_route_converts_zero_based_cue_to_one_based_number(self):
         class FakeResponse:
             content = b"jpeg"
@@ -1641,6 +1697,25 @@ class ProPresenterPollingTests(unittest.IsolatedAsyncioTestCase):
             "http://127.0.0.1:53528/v1/trigger/next",
             "http://127.0.0.1:53528/v1/trigger/previous",
         ])
+
+    async def test_macro_trigger_uses_documented_stable_id_route(self):
+        class FakeResponse:
+            def raise_for_status(self):
+                return None
+
+        class FakeHttp:
+            def __init__(self):
+                self.calls = []
+
+            async def get(self, url):
+                self.calls.append(url)
+                return FakeResponse()
+
+        client = ProPresenterClient({"enabled": True, "host": "127.0.0.1", "port": 53528})
+        fake_http = FakeHttp()
+        client._client = fake_http
+        await client.trigger_macro("C10EA289-F927-490D-8EC9-5E6645AFD0C8")
+        self.assertEqual(fake_http.calls, ["http://127.0.0.1:53528/v1/macro/C10EA289-F927-490D-8EC9-5E6645AFD0C8/trigger"])
 
     async def test_playlist_slide_trigger_targets_exact_presentation(self):
         class FakeResponse:

@@ -104,6 +104,12 @@ When the active slide contains a ProPresenter timer element, ChurchBoard replace
 
 Add a **ProPresenter timers** widget from the dashboard editor to show every configured ProPresenter timer that the Network API returns. Each card shows its timer name, current value, and state; the cards scale in both directions when the widget is shortened so countdown text is not clipped. The widget is read-only and updates from ProPresenter without controlling timer playback.
 
+## Macros
+
+Add a **ProPresenter macros** widget to expose the macros already configured in ProPresenter. ChurchBoard reads the macro name, order, color, and stable identifier from the Network API; it does not recreate or modify macro actions. In the widget settings, choose **Show all macros** or **Only selected macros**. Selected mode provides a checkbox for each macro returned by the connected ProPresenter computer.
+
+Keep **Allow this widget to trigger macros** enabled when operators should be able to run them. Each button uses the macro's stable ProPresenter identifier, so filtering and triggering continue to work if macros are reordered. Because a macro can change several live-production systems at once, only expose macros that are appropriate for that board and operator role.
+
 ## 5. Let ProPresenter drive Planning Center Services LIVE
 
 ProPresenter's built-in Planning Center LIVE panel and its slide playback are separate controls; advancing a slide does not itself advance LIVE. Renewed Vision explains that behavior in [Planning Center Live and Stage Timers](https://support.renewedvision.com/hc/en-us/articles/1500006143281-Planning-Center-Live-and-Planning-Center-Live-Stage-Timers). ChurchBoard's optional LIVE automation provides the linkage.

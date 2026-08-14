@@ -303,8 +303,8 @@ class RuntimeService:
         pp_due = clock - self._last_refresh["propresenter"] >= pp_interval
         if propresenter.configured and (force or pp_due):
             self._last_refresh["propresenter"] = clock
+            previous_presentation = next_state.get("propresenter") or {}
             try:
-                previous_presentation = next_state.get("propresenter") or {}
                 fresh_presentation = await propresenter.status()
                 same_presentation = (
                     fresh_presentation.get("presentation_uuid")
@@ -336,7 +336,17 @@ class RuntimeService:
                         self._apply_provisional_rehearsal_target(next_state, preliminary_match, fresh_presentation)
                 next_state["propresenter"] = fresh_presentation
             except Exception as exc:
-                next_state["propresenter"] = {"connected": False, "error": str(exc), "current": {}, "next": {}}
+                # Macros and timers come from independent ProPresenter
+                # endpoints. A transient or empty slide-status response must
+                # not make those controls disappear from the board.
+                next_state["propresenter"] = {
+                    "connected": False,
+                    "error": str(exc),
+                    "current": {},
+                    "next": {},
+                    "macros": previous_presentation.get("macros") or [],
+                    "timers": previous_presentation.get("timers") or [],
+                }
         # Publish slide changes before slower cloud integrations finish so a
         # Planning Center refresh cannot hold up the local ProPresenter view.
         self.state = deepcopy(next_state)
@@ -1285,5 +1295,6 @@ class RuntimeService:
                 "next": {"text": "Next worship slide", "notes": "", "image_uuid": "", "image_url": "", "part": "Verse 2", "color": "#45b7d1", "index": 4, "total": 8},
                 "slides": demo_slides,
                 "playlist_presentations": [{"index": 0, "title": "Amazing Grace", "presentation_uuid": "demo-amazing-grace", "active": True, "triggerable": True, "is_pco": True, "slides": demo_slides}],
+                "macros": [{"id": "demo-walk-in", "name": "Walk In", "index": 0, "color": "#276f58"}, {"id": "demo-song", "name": "Song Look", "index": 1, "color": "#244f87"}, {"id": "demo-message", "name": "Message", "index": 2, "color": "#7d3030"}],
             },
         }

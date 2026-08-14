@@ -91,6 +91,10 @@ class ProPresenterNavigationRequest(BaseModel):
     widget_id: str | None = None
 
 
+class ProPresenterMacroTrigger(ProPresenterNavigationRequest):
+    macro_id: str
+
+
 class LightingButtonTrigger(BaseModel):
     name: str
     mode: str = "toggle"
@@ -1511,7 +1515,7 @@ def require_propresenter_widget_control(request: Request, dashboard_slug: str | 
         (item for item in (dashboard or {}).get("widgets", []) if str(item.get("id") or "") == str(widget_id or "")),
         None,
     )
-    if not widget or widget.get("type") not in {"playlist", "pp_controls"} or widget.get("settings", {}).get("allow_remote_trigger") is False:
+    if not widget or widget.get("type") not in {"playlist", "pp_controls", "pp_macros"} or widget.get("settings", {}).get("allow_remote_trigger") is False:
         raise HTTPException(403, "Enable ProPresenter control in this widget's settings")
     return data["settings"].get("propresenter", {})
 
@@ -1553,6 +1557,23 @@ async def propresenter_navigate(direction: str, request: Request, payload: ProPr
     finally:
         await client.close()
     return {"ok": True, "direction": direction}
+
+
+@app.post("/api/integrations/propresenter/macro")
+async def propresenter_trigger_macro(payload: ProPresenterMacroTrigger, request: Request) -> dict:
+    settings = require_propresenter_widget_control(request, payload.dashboard_slug, payload.widget_id)
+    client = ProPresenterClient(settings)
+    if not client.configured:
+        raise HTTPException(400, "ProPresenter is not connected")
+    try:
+        await client.trigger_macro(payload.macro_id)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(502, f"Could not trigger the ProPresenter macro: {exc}") from exc
+    finally:
+        await client.close()
+    return {"ok": True, "macro_id": payload.macro_id}
 
 
 @app.post("/api/integrations/propresenter/navigate-item/{direction}")

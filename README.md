@@ -25,6 +25,7 @@ See ChurchBoard in action and follow the setup walkthrough in the **[ChurchBoard
 - A scrollable ProPresenter playlist that shows every playlist item, presentation, and section marker with a per-widget choice of rendered preview images or slide text; repeated arrangement sections retain correct thumbnails, and trusted operators can trigger a presentation or individual slide from ChurchBoard
 - Optional live-board slide controls and keyboard control for ProPresenter, with corrected current-slide thumbnails and Planning Center-linked item matching
 - A read-only ProPresenter timers widget showing each timer's current value and state
+- A ProPresenter macros widget that can show every macro or an operator-safe selection and trigger them by stable ID
 - ProPresenter item title, part labels and colors, slide number, and notes
 - Compact, complete scrollable, or fit-to-board Planning Center orders of service—including pre-service and post-service sections—with durations, estimated clock times, leaders, and mapped microphones
 - Current item and overall service timing
@@ -35,7 +36,7 @@ See ChurchBoard in action and follow the setup walkthrough in the **[ChurchBoard
 - Restream broadcast, viewer, and destination-status monitoring through OAuth
 - OBS Studio streaming/recording state, connection health, output statistics, dropped-frame warnings, and an optional preview image
 - Planning Center Services LIVE control buttons
-- A WYSIWYG dashboard editor with an always-visible **Edit** button, right-click settings, independent layouts, and color-matched liquid-glass widgets for each destination
+- A unified WYSIWYG dashboard editor that slides over the live board, keeps real data visible, and returns to the board when saved
 - Exportable/importable dashboard layout files and a categorized widget palette with modal settings and direct edge/corner resizing
 - A multi-provider livestream status widget with green/gray state lights, per-stream elapsed time, available live-viewer counts, Facebook/YouTube channel URLs, and independent BoxCast, Resi, and Restream API configuration
 - A scrollable, resizable sermon-notes widget that selects a named note field from a Planning Center service item
@@ -56,28 +57,25 @@ Choose your computer and click its download link:
 
 | Your computer | Download |
 | --- | --- |
-| **Windows 10 or 11** | **[Download the Windows installer (.exe)](https://github.com/wtapper89/ChurchBoard/releases/latest/download/ChurchBoard-2.0.0-Windows-x64-Setup.exe)** |
-| **Mac with Apple silicon** — M1 or newer | **[Download the Apple silicon Mac disk image (.dmg)](https://github.com/wtapper89/ChurchBoard/releases/latest/download/ChurchBoard-2.0.0-macOS-arm64.dmg)** |
-| **Mac with an Intel processor** | **[Download the Intel Mac disk image (.dmg)](https://github.com/wtapper89/ChurchBoard/releases/latest/download/ChurchBoard-2.0.0-macOS-x86_64.dmg)** |
-| **Ubuntu or Debian Linux** | **[Download the Linux installer (.deb)](https://github.com/wtapper89/ChurchBoard/releases/latest/download/ChurchBoard-2.0.0-Linux-amd64.deb)** |
-| **Other 64-bit desktop Linux** | **[Download the portable Linux package (.tar.gz)](https://github.com/wtapper89/ChurchBoard/releases/latest/download/ChurchBoard-2.0.0-Linux-x86_64.tar.gz)** |
+| **Windows 10 or 11** | **[Download the Windows installer (.exe)](https://github.com/wtapper89/ChurchBoard/releases/latest/download/ChurchBoard-2.0.1-Windows-x64-Setup.exe)** |
+| **Mac with Apple silicon** — M1 or newer | **[Download the Apple silicon Mac disk image (.dmg)](https://github.com/wtapper89/ChurchBoard/releases/latest/download/ChurchBoard-2.0.1-macOS-arm64.dmg)** |
+| **Mac with an Intel processor** | **[Download the Intel Mac disk image (.dmg)](https://github.com/wtapper89/ChurchBoard/releases/latest/download/ChurchBoard-2.0.1-macOS-x86_64.dmg)** |
+| **Ubuntu or Debian Linux** | **[Download the Linux installer (.deb)](https://github.com/wtapper89/ChurchBoard/releases/latest/download/ChurchBoard-2.0.1-Linux-amd64.deb)** |
+| **Other 64-bit desktop Linux** | **[Download the portable Linux package (.tar.gz)](https://github.com/wtapper89/ChurchBoard/releases/latest/download/ChurchBoard-2.0.1-Linux-x86_64.tar.gz)** |
 
 Not sure which Mac you have? Choose **Apple menu → About This Mac**. If it says **Chip**, use Apple silicon. If it says **Processor**, use Intel.
 
 **Raspberry Pi:** jump to the [one-command Raspberry Pi installer](#raspberry-pi).
 
-[View all v2.0.0 downloads and release notes](https://github.com/wtapper89/ChurchBoard/releases/tag/v2.0.0)
+[View all v2.0.1 downloads and release notes](https://github.com/wtapper89/ChurchBoard/releases/tag/v2.0.1)
 
-### What's new in 2.0.0
+### What's new in 2.0.1
 
-- Producer accounts with Admin, Editor, and Volunteer roles; optional passwords; editable campuses and users; local administrator recovery; and easier Planning Center person matching.
-- Position-based, versioned checklists and resources, including Planning Center tagged media that opens inside ChurchBoard.
-- Portable dashboard export/import, a categorized widget palette, modal settings, always-visible editor buttons, and direct drag resizing.
-- Configurable listening port and direct HTTPS certificate support with mobile-friendly dashboards, editing, and Producer workflows.
-- New livestream, OBS, ProPresenter control, timers, and sermon-notes widgets with responsive sizing.
-- The ProPresenter Playlist can show rendered previews or slide text, follows repeated arrangements correctly, keeps controls and auto-scroll configurable per board, and triggers the exact numbered cue selected by the operator.
-- The unified module manager owns integration setup and dependencies, including Planning Center, ProPresenter, wireless microphones, NDI, ProdMesh RTA, lighting, OBS, streaming, and Producer intercom.
-- Automatic service-time rosters, locally mirrored resources, a restricted volunteer listener, native WebSocket RTA rendering, and per-item service audio history are included.
+- Trigger all or selected ProPresenter macros from a dedicated, touch-friendly dashboard widget.
+- Keep ProPresenter macros and timers visible when slides or all layers are cleared.
+- Navigate between a selected set of boards with custom labels and reliable single-click activation.
+- Edit the live board in place with a slide-in palette, real data, and a save action that returns directly to the display.
+- Use crisp, ChurchBoard-styled initials when a scheduled person has no profile photo.
 
 ## Install
 
@@ -111,7 +109,7 @@ Start with [Configuration](docs/CONFIGURATION.md), then follow the detailed [Pla
 
 ## Dashboard editing
 
-Each dashboard has a stable URL. Add widgets from the palette, drag them on the canvas, and resize from the blue right edge, bottom edge, or corner. The upper-right **Edit** button or a right-click opens modal settings, leaving the full editor width for the board. Every widget title can be hidden. Scheduled-position widgets can consolidate multiple roles into one card per person or retain one card per position. The ProPresenter playlist widget shows the focused playlist as a continuous, automatically scrolling list; choose rendered preview images or slide text, compact/comfortable/large density, an active-slide border color, and whether slide controls and keyboard control start enabled on that board. A separate control widget provides previous/next slide and item buttons. Order-of-service widgets can show a compact current window, a scrollable complete plan, or the complete plan fitted to the widget. Text, cards, photos, timers, and status displays scale with their widget and stack into readable cards on narrow mobile screens. Setup can cancel a new dashboard before it is named, and the editor includes a confirmation-protected **Delete display** action. The display hamburger includes an **Edit** action beside every board, and **Open display** in the editor reuses the current tab.
+Each dashboard has a stable URL. Hover over the upper-right board controls and choose **Edit**; the palette slides in over the current board while its live data remains visible. Add widgets, drag them on the canvas, and resize from the blue right edge, bottom edge, or corner. Save closes the palette without opening another page. Every widget title can be hidden. Board-navigation widgets can include only selected boards, preserve a custom order, and use operator-friendly labels. Scheduled-position widgets can consolidate multiple roles into one card per person or retain one card per position. The ProPresenter playlist widget shows the focused playlist as a continuous, automatically scrolling list; choose rendered preview images or slide text, compact/comfortable/large density, an active-slide border color, and whether slide controls and keyboard control start enabled on that board. Dedicated control and macro widgets provide touch-friendly playback and macro triggering. Order-of-service widgets can show a compact current window, a scrollable complete plan, or the complete plan fitted to the widget. Text, cards, photos, timers, and status displays scale with their widget and stack into readable cards on narrow mobile screens.
 
 ![ChurchBoard WYSIWYG dashboard editor](docs/screenshots/dashboard-editor.jpg)
 

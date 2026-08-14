@@ -39,6 +39,14 @@ class ModuleRegistry:
                 return module_id
         return None
 
+    @staticmethod
+    def _settings_keys(manifest: dict[str, Any]) -> list[str]:
+        keys = list(manifest.get("settings_keys") or [])
+        legacy_key = str(manifest.get("settings_key") or "")
+        if legacy_key and legacy_key not in keys:
+            keys.append(legacy_key)
+        return keys
+
     def _legacy_install_set(self, data: dict[str, Any]) -> set[str]:
         installed = {module_id for module_id, item in self._catalog.items() if item.get("core")}
         configured = data.get("settings") or {}
@@ -48,9 +56,9 @@ class ModuleRegistry:
             for widget in dashboard.get("widgets") or []
         }
         for module_id, manifest in self._catalog.items():
-            settings_key = str(manifest.get("settings_key") or "")
+            settings_keys = self._settings_keys(manifest)
             owns_widget = any(widget.get("type") in widget_types for widget in manifest.get("widgets", []))
-            enabled = bool(settings_key and (configured.get(settings_key) or {}).get("enabled"))
+            enabled = any(bool((configured.get(key) or {}).get("enabled")) for key in settings_keys)
             if owns_widget or enabled or manifest.get("default_installed"):
                 installed.add(module_id)
         return self.resolve_dependencies(installed)
@@ -70,6 +78,18 @@ class ModuleRegistry:
         changed = False
         state = data.setdefault("modules", {})
         installed = state.setdefault("installed", {})
+        legacy_wireless = [installed.pop(module_id) for module_id in ("shure-wireless", "sennheiser-wireless") if module_id in installed]
+        if legacy_wireless:
+            previous = installed.get("mics") or {}
+            installed["mics"] = {
+                **legacy_wireless[0],
+                **previous,
+                "version": self._catalog["mics"]["version"],
+                "enabled": previous.get("enabled", any(item.get("enabled", True) for item in legacy_wireless)),
+                "auto_update": previous.get("auto_update", any(item.get("auto_update", True) for item in legacy_wireless)),
+                "updated_at": datetime.now(timezone.utc).isoformat(),
+            }
+            changed = True
         if not installed:
             now = datetime.now(timezone.utc).isoformat()
             for module_id in self._legacy_install_set(data):
@@ -171,9 +191,9 @@ class ModuleRegistry:
             names = ", ".join(self._catalog[item]["name"] for item in dependents)
             raise ValueError(f"Remove {names} first because they require {manifest['name']}")
         installed.pop(module_id, None)
-        settings_key = str(manifest.get("settings_key") or "")
-        if settings_key and settings_key in (data.get("settings") or {}):
-            data["settings"][settings_key]["enabled"] = False
+        for settings_key in self._settings_keys(manifest):
+            if settings_key in (data.get("settings") or {}):
+                data["settings"][settings_key]["enabled"] = False
 
     def update(self, data: dict[str, Any], module_id: str) -> None:
         if module_id not in self._catalog:

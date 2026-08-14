@@ -32,6 +32,7 @@ from app.modules.ndi import NDIRuntime
 from app.modules.livekit import HostedIntercomServer
 from app.modules.prodmesh_rta import ProdMeshRTAClient
 from app.modules.prodmesh_host import HostedProdMeshRTA
+from app.modules.behringer import BehringerClient, db_to_x32_fader
 from app.store import ConfigStore
 
 
@@ -42,7 +43,7 @@ class RuntimeService:
         self.state: dict[str, Any] = self.demo_state()
         self._task: asyncio.Task | None = None
         self._stop = asyncio.Event()
-        self._last_refresh = {"planning_center": 0.0, "planning_center_detail": 0.0, "planning_center_live": 0.0, "propresenter": 0.0, "shure": 0.0, "sennheiser": 0.0, "prodmesh_host": 0.0, "prodmesh_rta": 0.0, "restream": 0.0, "obs": 0.0, "streams": 0.0}
+        self._last_refresh = {"planning_center": 0.0, "planning_center_detail": 0.0, "planning_center_live": 0.0, "propresenter": 0.0, "shure": 0.0, "sennheiser": 0.0, "prodmesh_host": 0.0, "prodmesh_rta": 0.0, "behringer": 0.0, "restream": 0.0, "obs": 0.0, "streams": 0.0}
         self._service_control: dict[str, Any] = {"active": False}
         self._pp_live_candidate = ""
         self._pp_live_candidate_since = 0.0
@@ -62,6 +63,8 @@ class RuntimeService:
         self._prodmesh_client: ProdMeshRTAClient | None = None
         self._prodmesh_key: tuple[Any, ...] | None = None
         self._last_prodmesh_report_at = 0.0
+        self._behringer_client: BehringerClient | None = None
+        self._behringer_key: tuple[Any, ...] | None = None
         self.prodmesh_host = HostedProdMeshRTA()
         self.media_cache = PlanningCenterMediaCache(store.path)
         self.ndi = NDIRuntime()
@@ -232,6 +235,7 @@ class RuntimeService:
         configured_media_titles = self._configured_media_titles(stored_data)
         configured_resource_tags = self._configured_resource_tags(stored_data)
         configured_stream_sources = self._configured_stream_sources(stored_data)
+        configured_behringer_strips = self._configured_behringer_strips(stored_data)
         if config.get("demo_mode"):
             demo = deepcopy(self.state) if self.state.get("service", {}).get("id") == "demo" else self.demo_state()
             demo["organization_name"] = config.get("organization_name", "My Church")
@@ -243,6 +247,7 @@ class RuntimeService:
             demo["planning_center_live"] = {"enabled": bool((config.get("planning_center", {}).get("live_from_propresenter") or {}).get("enabled")), "state": "demo", "message": "Services LIVE automation is available when demonstration data is off"}
             demo["restream"] = {"connected": False, "status": "offline", "title": "Restream monitoring is unavailable in demo mode", "destinations": []}
             demo["livestreams"] = [{**self._public_stream_source(source), "label": source.get("label") or str(source.get("provider") or "Stream").title(), "live": False, "status": "demo", "checked": False} for source in configured_stream_sources]
+            demo["behringer"] = self._demo_behringer(configured_behringer_strips)
             self._apply_service_control(demo)
             self.state = demo
             return self.state
@@ -270,6 +275,17 @@ class RuntimeService:
             except Exception as exc: next_state["prodmesh_rta"] = {"connected": False, "error": str(exc), "host": self.prodmesh_host.status(prodmesh_settings)}
         elif not self._prodmesh_client.configured:
             next_state["prodmesh_rta"] = {"connected": False, "error": "ProdMesh RTA is not enabled"}
+        behringer_settings = config.get("behringer", {})
+        behringer_key = (bool(behringer_settings.get("enabled")), str(behringer_settings.get("model") or "x32"), str(behringer_settings.get("host") or ""), int(behringer_settings.get("port") or 10023))
+        if self._behringer_client is None or behringer_key != self._behringer_key:
+            self._behringer_client, self._behringer_key = BehringerClient(behringer_settings), behringer_key
+        behringer_due = clock - self._last_refresh["behringer"] >= max(.12, float(behringer_settings.get("refresh_seconds") or .2))
+        if self._behringer_client.configured and configured_behringer_strips and (force or behringer_due):
+            self._last_refresh["behringer"] = clock
+            try: next_state["behringer"] = await self._behringer_client.status(configured_behringer_strips)
+            except Exception as exc: next_state["behringer"] = {"connected": False, "error": str(exc), "strips": []}
+        elif not self._behringer_client.configured:
+            next_state["behringer"] = {"connected": False, "error": "Behringer mixer is not enabled", "strips": []}
         propresenter_settings = config.get("propresenter", {})
         propresenter_key = (
             bool(propresenter_settings.get("enabled")),
@@ -1037,6 +1053,25 @@ class RuntimeService:
                         secret_key = f"{dashboard.get('id')}:{widget.get('id')}:{key.casefold()}"
                         sources[key] = {**source, "id": key, "api_token": str(vault.get(secret_key) or "")}
         return list(sources.values())
+
+    @staticmethod
+    def _configured_behringer_strips(data: dict[str, Any]) -> list[dict[str, Any]]:
+        strips: dict[str, dict[str, Any]] = {}
+        for dashboard in data.get("dashboards", []):
+            for widget in dashboard.get("widgets", []):
+                if widget.get("type") != "behringer_faders":
+                    continue
+                for strip in (widget.get("settings") or {}).get("strips") or []:
+                    strip_id = str(strip.get("id") or "").strip()
+                    if strip_id:
+                        signature = f"{strip_id}:{strip.get('kind')}:{strip.get('number')}:{strip.get('target_bus')}"
+                        strips[signature] = strip
+        return list(strips.values())
+
+    @staticmethod
+    def _demo_behringer(strips: list[dict[str, Any]]) -> dict[str, Any]:
+        values = [-5.0, -10.0, 0.0, -20.0]
+        return {"connected": True, "model": "x32", "host": "demo", "strips": [{**strip, "db": values[index % len(values)], "position": db_to_x32_fader(values[index % len(values)]), "muted": index == 2, "online": True} for index, strip in enumerate(strips)]}
 
     @staticmethod
     def _public_stream_source(source: dict[str, Any]) -> dict[str, Any]:

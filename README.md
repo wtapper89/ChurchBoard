@@ -6,7 +6,7 @@
 
 <h1 align="center">ChurchBoard</h1>
 
-ChurchBoard is a cross-platform production dashboard for churches. It combines Planning Center schedules and people, ProPresenter slides and service flow, Shure QLX-D/ULX-D/SLX-D and Sennheiser EW-DX microphone telemetry, Open Sound Meter and ProdMesh RTA levels, ShowXpress/TLC lighting controls, OBS Studio health, and Restream broadcast status in configurable displays for the stage, green room, audio booth, and production team.
+ChurchBoard is a cross-platform production dashboard for churches. It combines Planning Center schedules and people, ProPresenter slides and service flow, Shure QLX-D/ULX-D/SLX-D and Sennheiser EW-DX microphone telemetry, touch-friendly Behringer X32/M32/WING mixer control, Open Sound Meter and ProdMesh RTA levels, ShowXpress/TLC lighting controls, OBS Studio health, and Restream broadcast status in configurable displays for the stage, green room, audio booth, and production team.
 
 ChurchBoard 2 adds a mobile-friendly Producer workspace, a Companion-style module manager, automatic per-service-time rosters, locally mirrored Planning Center resources, optional NDI® video, native WebSocket ProdMesh RTA rendering, ShowXpress/TLC lighting control, and a ChurchBoard-hosted LiveKit Producer party-line intercom. See the [Producer workspace guide](docs/PRODUCER.md) and [ChurchBoard modules](docs/MODULES.md).
 
@@ -107,7 +107,7 @@ Open `http://127.0.0.1:8040/modules`, turn off demonstration data in the core se
 
 ![ChurchBoard integrations setup](docs/screenshots/setup.jpg)
 
-Start with [Configuration](docs/CONFIGURATION.md), then follow the detailed [Planning Center setup](docs/PLANNING_CENTER.md), [ProPresenter setup](docs/PROPRESENTER.md), [Open Sound Meter setup](docs/OPEN_SOUND_METER.md), [ProdMesh Remote RTA setup](docs/PRODMESH_RTA.md), and [Restream setup](docs/RESTREAM.md) guides. They cover secure credentials, permissions, photos, leaders, linked service playlists, the Network API, Services LIVE automation, dashboards, microphone mapping, level reporting, livestream monitoring, and troubleshooting.
+Start with [Configuration](docs/CONFIGURATION.md), then follow the detailed [Planning Center setup](docs/PLANNING_CENTER.md), [ProPresenter setup](docs/PROPRESENTER.md), [Behringer mixer setup](docs/BEHRINGER.md), [Open Sound Meter setup](docs/OPEN_SOUND_METER.md), [ProdMesh Remote RTA setup](docs/PRODMESH_RTA.md), and [Restream setup](docs/RESTREAM.md) guides. They cover secure credentials, permissions, photos, leaders, linked service playlists, the Network API, Services LIVE automation, dashboards, microphone and mixer control, level reporting, livestream monitoring, and troubleshooting.
 
 ## Dashboard editing
 
@@ -131,7 +131,7 @@ The Producer workflow is responsive for phones and tablets, keeping service sele
 
 ChurchBoard's visual microphone-monitoring direction was inspired by [Micboard](https://micboard.io/) by Karl Swanson, an independent MIT-licensed project for network-enabled Shure devices. The initial cross-platform dashboard concept also drew inspiration from [NewsTalentMonitorPlus](https://github.com/wtapper89/NewsTalentMonitorPlus). ChurchBoard is a separate implementation and does not bundle either project's code or assets.
 
-Special thanks to [Caleb Hines (@WorshipWarehouse)](https://github.com/WorshipWarehouse) for the ChurchBoard integration and dashboard contributions, including Open Sound Meter, Restream, OBS Studio, scheduled-person consolidation, complete service-order display modes, Sennheiser EW-DX and Shure SLX-D monitoring, ProPresenter playlist control and timers, ShowXpress/TheLightingController support, dashboard lifecycle controls, and responsive fullscreen improvements. Thanks also to [Justin Beale (@jbeale)](https://github.com/jbeale), creator of the MIT-licensed ProdMesh Remote RTA engine bundled and supervised by ChurchBoard. The original commits and authorship are preserved in the project history. See [Contributors](CONTRIBUTORS.md).
+Special thanks to [Caleb Hines (@WorshipWarehouse)](https://github.com/WorshipWarehouse) for the ChurchBoard integration and dashboard contributions, including Open Sound Meter, Restream, OBS Studio, scheduled-person consolidation, complete service-order display modes, Sennheiser EW-DX and Shure SLX-D monitoring, ProPresenter playlist control and timers, ShowXpress/TheLightingController support, dashboard lifecycle controls, and responsive fullscreen improvements. Thanks also to [Justin Beale (@jbeale)](https://github.com/jbeale), creator of the MIT-licensed ProdMesh Remote RTA engine bundled and supervised by ChurchBoard. Behringer OSC addressing and fader behavior were implemented with reference to Bitfocus Companion's MIT-licensed X32 and WING modules; ChurchBoard does not bundle their code. The original commits and authorship are preserved in the project history. See [Contributors](CONTRIBUTORS.md).
 
 The people shown in demonstration mode and documentation are AI-generated fictional samples, not real team members. ChurchBoard is independently developed and is not affiliated with or endorsed by Planning Center, Shure, Renewed Vision/ProPresenter, Micboard, Apple, Microsoft, or Raspberry Pi.
 

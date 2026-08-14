@@ -1,4 +1,5 @@
 let dashboard,lastState={},serverInstance="",refreshInFlight=false,planOptionsKey="",serviceTimeOptionsKey="",planSelectionInFlight=false,lastFullRefresh=0,compactEtag="",ppKeyboardInFlight=false,prodmeshSocket=null,prodmeshReconnectTimer=0;
+const mixerDragging=new Set(),mixerSendTimers=new Map();
 const widgetRenderKeys=new Map();
 const orderScrollPositions=new Map();
 const playlistScrollPositions=new Map();
@@ -21,6 +22,12 @@ document.addEventListener("click",async event=>{const button=event.target.closes
 document.addEventListener("click",async event=>{const button=event.target.closest("[data-pp-playlist-trigger]");if(!button||button.disabled)return;const index=Number(button.dataset.ppPlaylistTrigger);if(!Number.isInteger(index)||index<0)return;button.disabled=true;try{await api("/api/integrations/propresenter/active-playlist-item",{method:"POST",body:JSON.stringify({index,presentation_uuid:button.dataset.ppPresentationUuid||null,is_pco:button.dataset.ppIsPco==="true",...triggerScope(button)})})}catch(error){alert(error.message)}finally{button.disabled=false}});
 document.addEventListener("click",async event=>{const button=event.target.closest("[data-pp-nav],[data-pp-item-nav]");if(!button||button.disabled)return;const direction=button.dataset.ppNav||button.dataset.ppItemNav,endpoint=button.dataset.ppItemNav?"navigate-item":"navigate",status=button.closest(".pp-control-pad")?.querySelector("[data-pp-control-status]");button.disabled=true;if(status)status.textContent=direction==="next"?"Advancing ProPresenter…":"Going back in ProPresenter…";try{await api(`/api/integrations/propresenter/${endpoint}/${direction}`,{method:"POST",body:JSON.stringify(triggerScope(button))});await refresh(true)}catch(error){if(status)status.textContent=error.message}finally{button.disabled=false}});
 document.addEventListener("click",async event=>{const button=event.target.closest("[data-lighting-button]");if(!button||button.disabled)return;button.disabled=true;try{await api("/api/integrations/lighting/button",{method:"POST",body:JSON.stringify({name:button.dataset.lightingButton,mode:"toggle",...triggerScope(button)})});await loadLightingButtons(button.closest(".widget"),true)}catch(error){alert(error.message)}finally{button.disabled=false}});
+async function sendMixerControl(element,values){const widget=element.closest(".widget"),strip=element.closest("[data-mixer-strip]");if(!widget||!strip)return;try{await api("/api/integrations/behringer/control",{method:"POST",body:JSON.stringify({...triggerScope(element),strip_id:strip.dataset.mixerStrip,...values})})}catch(error){alert(error.message)}}
+document.addEventListener("pointerdown",event=>{const fader=event.target.closest("[data-mixer-fader]");if(fader)mixerDragging.add(String(fader.closest(".widget")?.dataset.widget||""))});
+document.addEventListener("pointerup",event=>{const fader=event.target.closest("[data-mixer-fader]");if(!fader)return;const widgetId=String(fader.closest(".widget")?.dataset.widget||"");mixerDragging.delete(widgetId);widgetRenderKeys.delete(widgetId)});
+document.addEventListener("input",event=>{const fader=event.target.closest("[data-mixer-fader]");if(!fader)return;const db=x32FaderToDb(fader.value),output=fader.closest("[data-mixer-strip]")?.querySelector("[data-mixer-db]");if(output)output.textContent=`${mixerDbLabel(db)} dB`;const key=`${fader.closest(".widget")?.dataset.widget}:${fader.dataset.mixerFader}`;clearTimeout(mixerSendTimers.get(key));mixerSendTimers.set(key,setTimeout(()=>sendMixerControl(fader,{level_db:Number.isFinite(db)?db:-100}),65))});
+document.addEventListener("change",event=>{const fader=event.target.closest("[data-mixer-fader]");if(fader)sendMixerControl(fader,{level_db:Number.isFinite(x32FaderToDb(fader.value))?x32FaderToDb(fader.value):-100})});
+document.addEventListener("click",event=>{const button=event.target.closest("[data-mixer-mute]");if(!button)return;const muted=!button.classList.contains("active");button.classList.toggle("active",muted);button.setAttribute("aria-pressed",String(muted));button.closest("[data-mixer-strip]")?.classList.toggle("muted",muted);sendMixerControl(button,{muted})});
 async function loadLightingButtons(widget,force=false){const root=widget?.querySelector("[data-lighting-buttons]");if(!root||(!force&&root.dataset.loaded==="true"))return;try{const result=await api("/api/integrations/lighting/buttons");root.dataset.loaded="true";root.innerHTML=(result.items||[]).map(item=>`<button type="button" data-lighting-button="${escapeHtml(item.name)}" class="${item.pressed?"active":""}" style="--cue-color:${safeCssColor(item.color)}"><strong>${escapeHtml(item.name)}</strong><span>${escapeHtml(item.page)}</span></button>`).join("")||'<div class="empty">No lighting buttons are exposed</div>'}catch(error){root.innerHTML=`<div class="empty">${escapeHtml(error.message)}</div>`}}
 const keyboardStorageKey=widgetId=>`churchboard:${slug}:propresenter-keyboard:${widgetId}`;
 function syncPlaylistOperatorToggles(root=document){root.querySelectorAll('[data-widget-type="playlist"]').forEach(element=>{const widgetId=element.dataset.widget,controls=element.querySelector("[data-pp-controls-toggle]"),keyboard=element.querySelector("[data-pp-keyboard-toggle]");if(!keyboard)return;const controlsEnabled=!!controls?.checked,stored=localStorage.getItem(keyboardStorageKey(widgetId)),enabled=stored===null?keyboard.dataset.defaultChecked==="true":stored==="true";keyboard.disabled=!controlsEnabled;keyboard.checked=controlsEnabled&&enabled})}
@@ -91,6 +98,7 @@ function render(){
   for(const widget of widgets){
     const id=String(widget.id),renderKey=widgetStateKey(widget,lastState);
     activeIds.add(id);
+    if(widget.type==="behringer_faders"&&mixerDragging.has(id))continue;
     if(widgetRenderKeys.get(id)===renderKey&&existing.has(id))continue;
     const current=existing.get(id),previousList=current?.querySelector(".full-service-order-list"),previousPlaylist=current?.querySelector(".pp-browser-scroll");if(previousList)orderScrollPositions.set(id,previousList.scrollTop);if(previousPlaylist)playlistScrollPositions.set(id,previousPlaylist.scrollTop);
     const markup=widgetMarkup(widget,lastState);
@@ -129,6 +137,7 @@ function widgetStateKey(widget,state){
   if(widget.type==="propresenter_timers")return`propresenter-timers:${JSON.stringify(pp.timers||[])}`;
   if(widget.type==="ndi")return`ndi:${settings.source_name||""}`;
   if(widget.type==="prodmesh_rta")return`prodmesh-rta:${JSON.stringify(state.prodmesh_rta||{})}:${JSON.stringify(settings)}`;
+  if(widget.type==="behringer_faders")return`behringer:${JSON.stringify(state.behringer||{})}:${JSON.stringify(settings)}`;
   if(widget.type==="lighting")return`lighting:${JSON.stringify(settings)}`;
   return`${widget.type}:${JSON.stringify(state)}`;
 }

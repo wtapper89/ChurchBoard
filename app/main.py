@@ -34,6 +34,7 @@ from app.modules.propresenter import ProPresenterClient
 from app.modules.restream import RestreamClient
 from app.modules.livekit import access_token as livekit_access_token
 from app.modules.prodmesh_rta import ProdMeshRTAClient
+from app.modules.behringer import BehringerClient
 from app.modules.thelightingcontroller import TheLightingControllerClient
 from app.store import ConfigStore
 from app.update import download_update, update_status
@@ -48,6 +49,14 @@ class ActivePlanRequest(BaseModel):
 class ActiveServiceTimeRequest(BaseModel):
     id: str | None = None
     plan_id: str | None = None
+
+
+class BehringerControlRequest(BaseModel):
+    dashboard_slug: str
+    widget_id: str
+    strip_id: str
+    level_db: float | None = Field(default=None, ge=-120, le=10)
+    muted: bool | None = None
 
 
 class OSMMeasurement(BaseModel):
@@ -1028,6 +1037,7 @@ async def get_runtime(request: Request, compact: bool = False) -> dict:
             "service_control",
             "osm",
             "prodmesh_rta",
+            "behringer",
             "restream",
             "livestreams",
             "obs",
@@ -1138,6 +1148,50 @@ async def lighting_trigger_button(payload: LightingButtonTrigger, request: Reque
     if not client.configured: raise HTTPException(400, "Lighting control is not connected")
     try: await client.trigger_button(payload.name, payload.mode); return {"ok": True}
     except Exception as exc: raise HTTPException(502, f"Could not trigger lighting button: {exc}") from exc
+
+
+def behringer_widget_strip(request: Request, dashboard_slug: str, widget_id: str, strip_id: str) -> dict:
+    dashboard = dashboard_or_404(store_from(request), dashboard_slug)
+    widget = next((item for item in dashboard.get("widgets", []) if item.get("id") == widget_id and item.get("type") == "behringer_faders"), None)
+    if not widget:
+        raise HTTPException(403, "Mixer control must come from a Behringer faders widget")
+    strip = next((item for item in (widget.get("settings") or {}).get("strips") or [] if str(item.get("id") or "") == strip_id), None)
+    if not strip:
+        raise HTTPException(404, "That fader is not configured in this widget")
+    return strip
+
+
+@app.post("/api/integrations/behringer/control")
+async def control_behringer(payload: BehringerControlRequest, request: Request) -> dict:
+    strip = behringer_widget_strip(request, payload.dashboard_slug, payload.widget_id, payload.strip_id)
+    settings = store_from(request).load()["settings"].get("behringer", {})
+    client = BehringerClient(settings)
+    if not client.configured:
+        raise HTTPException(400, "Enable the Behringer module and save the console address first")
+    if payload.level_db is None and payload.muted is None:
+        raise HTTPException(400, "Choose a fader level or mute state")
+    try:
+        await client.control(strip, payload.level_db, payload.muted)
+    except Exception as exc:
+        raise HTTPException(502, f"Could not control the mixer: {exc}") from exc
+    return {"ok": True}
+
+
+@app.post("/api/integrations/behringer/test")
+async def test_behringer(request: Request) -> dict:
+    require_role(request, "admin", "editor")
+    settings = store_from(request).load()["settings"].get("behringer", {})
+    client = BehringerClient(settings)
+    if not client.configured:
+        raise HTTPException(400, "Enable the Behringer module and save the console address first")
+    probe = {"id": "test-main", "label": "Main LR", "kind": "main", "number": 1}
+    try:
+        result = await client.status([probe])
+    except Exception as exc:
+        raise HTTPException(502, f"Could not reach the mixer: {exc}") from exc
+    if not result.get("connected"):
+        raise HTTPException(502, "No OSC response was received. Check the console address, network, and port.")
+    return {"connected": True, "message": f"Connected to {str(settings.get('model') or 'X32').upper()} at {settings.get('host')}", "items": result.get("strips")}
 
 
 @app.post("/api/integrations/osm/measurement", status_code=202)

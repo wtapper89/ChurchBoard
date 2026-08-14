@@ -53,6 +53,7 @@ class SettingsUpdate(BaseModel):
     sennheiser: dict[str, Any] = Field(default_factory=dict)
     open_sound_meter: dict[str, Any] = Field(default_factory=dict)
     prodmesh_rta: dict[str, Any] = Field(default_factory=dict)
+    behringer: dict[str, Any] = Field(default_factory=dict)
     restream: dict[str, Any] = Field(default_factory=dict)
     obs: dict[str, Any] = Field(default_factory=dict)
     lighting: dict[str, Any] = Field(default_factory=dict)

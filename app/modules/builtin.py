@@ -65,18 +65,11 @@ BUILTIN_MODULES = [
         "configuration_path": "/modules#services-live-bridge", "frontend": {},
     },
     {
-        "id": "shure-wireless", "name": "Shure Wireless", "vendor": "Shure", "version": "2.0.0",
-        "description": "QLX-D, ULX-D, and SLX-D receiver status, battery, RF, audio, mute, and position mapping.", "category": "Wireless audio",
-        "settings_key": "shure", "dependencies": [], "provides": ["churchboard.microphones/v1"], "consumes": ["churchboard.people/v1?"], "widgets": [], "pages": [],
-        "setup": [{"title": "Use the production LAN", "text": "Connect each receiver and the ChurchBoard computer to the same trusted network."}, {"title": "Add receiver channels", "text": "Enter the receiver IP, channel, friendly mic name, and optional Planning Center position."}],
-        "configuration_path": "/modules#shure-wireless", "frontend": {},
-    },
-    {
-        "id": "sennheiser-wireless", "name": "Sennheiser Wireless", "vendor": "Sennheiser", "version": "2.0.0",
-        "description": "EW-DX receiver telemetry through Sennheiser SSC, sharing the microphone data contract with other wireless modules.", "category": "Wireless audio",
-        "settings_key": "sennheiser", "dependencies": [], "provides": ["churchboard.microphones/v1"], "consumes": ["churchboard.people/v1?"], "widgets": [], "pages": [],
-        "setup": [{"title": "Enable SSC", "text": "Allow legacy SSC control on the receiver and keep UDP port 45 reachable on the production LAN."}, {"title": "Add receiver channels", "text": "Enter each receiver IP, channel, friendly name, and optional Planning Center position."}],
-        "configuration_path": "/modules#sennheiser-wireless", "frontend": {},
+        "id": "mics", "name": "Mics", "vendor": "ChurchBoard", "version": "3.0.0",
+        "description": "Shure and Sennheiser wireless receiver status, battery, RF, audio, mute, and position mapping.", "category": "Wireless audio",
+        "settings_keys": ["shure", "sennheiser"], "dependencies": [], "provides": ["churchboard.microphones/v1"], "consumes": ["churchboard.people/v1?"], "widgets": [], "pages": [],
+        "setup": [{"title": "Use the production LAN", "text": "Connect each receiver and the ChurchBoard computer to the same trusted network."}, {"title": "Add receiver channels", "text": "Choose Shure or Sennheiser for each channel, then enter its IP, name, and optional Planning Center position."}],
+        "configuration_path": "/modules#mics", "frontend": {},
     },
     {
         "id": "open-sound-meter", "name": "Open Sound Meter", "vendor": "Open Sound Meter", "version": "2.0.0",
@@ -85,6 +78,14 @@ BUILTIN_MODULES = [
         "widgets": [widget("spl", "Open Sound Meter", "Audio & streaming", 4, 3, green_max=75, orange_max=85, weighting="A", response="Fast")], "pages": [],
         "setup": [{"title": "Enable the Remote API", "text": "Select the Wi-Fi icon in Open Sound Meter and enable Remote API Server."}, {"title": "Allow multicast", "text": "ChurchBoard listens on 239.255.42.42:49007; both devices must share a multicast-capable network."}],
         "configuration_path": "/modules#open-sound-meter", "documentation": "/docs/OPEN_SOUND_METER.md", "frontend": {"renderer": "legacy-adapter"},
+    },
+    {
+        "id": "behringer-mixer", "name": "Behringer X32 / WING", "vendor": "Behringer / Midas", "version": "1.0.0",
+        "description": "Touch-friendly X32, M32, and WING fader banks with live console feedback, channel sends, and mute control.", "category": "Audio control",
+        "settings_key": "behringer", "dependencies": [], "provides": ["churchboard.mixer-control/v1"], "consumes": [],
+        "widgets": [widget("behringer_faders", "Behringer faders", "Audio & streaming", 6, 5, strips=[{"id": "main-lr", "label": "MAIN LR", "kind": "main", "number": 1}])], "pages": [],
+        "setup": [{"title": "Enable remote control", "text": "Connect ChurchBoard and the console to the same trusted production network, then enter the console address."}, {"title": "Build a fader bank", "text": "Add the widget to a page and choose channels, bus/aux mixes, sends, DCAs, or the main mix."}],
+        "configuration_path": "/modules#behringer-mixer", "documentation": "/docs/BEHRINGER.md", "frontend": {"renderer": "legacy-adapter"},
     },
     {
         "id": "prodmesh-rta", "name": "ProdMesh Remote RTA", "vendor": "Justin Beale / ProdMesh", "version": "1.1.0",

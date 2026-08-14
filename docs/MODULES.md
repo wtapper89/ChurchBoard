@@ -15,7 +15,7 @@ This makes a page the output of installed modules instead of a hard-coded list i
 
 ## Current modules
 
-ChurchBoard includes modules for ChurchBoard pages, Planning Center Services, ProPresenter, ProPresenter-to-Services-LIVE interaction, Shure Wireless, Sennheiser Wireless, Open Sound Meter, [ProdMesh Remote RTA](PRODMESH_RTA.md), ShowXpress/TheLightingController, OBS Studio, Restream, multi-provider livestream monitoring, NDI video, Producer, and Producer Intercom.
+ChurchBoard includes modules for ChurchBoard pages, Planning Center Services, ProPresenter, ProPresenter-to-Services-LIVE interaction, Mics (Shure and Sennheiser wireless systems), [Behringer X32 / WING mixer control](BEHRINGER.md), Open Sound Meter, [ProdMesh Remote RTA](PRODMESH_RTA.md), ShowXpress/TheLightingController, OBS Studio, Restream, multi-provider livestream monitoring, NDI video, Producer, and Producer Intercom.
 
 The **Interactions** category is intentional. An interaction that combines two sources belongs in a small bridge module which consumes published contracts, rather than either source reaching into the other's implementation. For example:
 

@@ -82,6 +82,18 @@ def parse_osc(data: bytes) -> list[tuple[str, Any]]:
     return [(address, values[0] if len(values) == 1 else values)]
 
 
+def _osc_scalar(value: Any) -> Any:
+    """Return the first OSC value when a console sends a multi-argument reply.
+
+    X32/WING firmware can reply with a one-element argument array even for a
+    single fader or mute query.  Treat that equivalent to the scalar form so a
+    status poll cannot fail with ``float(list)``.
+    """
+    while isinstance(value, (list, tuple)) and value:
+        value = value[0]
+    return value
+
+
 def strip_paths(model: str, strip: dict[str, Any]) -> tuple[str, str, bool]:
     model = str(model or "x32").casefold()
     kind = str(strip.get("kind") or "channel").casefold()
@@ -142,11 +154,11 @@ class BehringerClient:
         rows = []
         for strip in strips:
             fader_path, mute_path, on_means_unmuted = strip_paths(self.model, strip)
-            raw = values.get(fader_path)
+            raw = _osc_scalar(values.get(fader_path))
             db = float(raw) if self.model == "wing" and raw is not None else x32_fader_to_db(float(raw)) if raw is not None else None
             if db is not None and not math.isfinite(db):
                 db = -100.0
-            mute_raw = values.get(mute_path)
+            mute_raw = _osc_scalar(values.get(mute_path))
             muted = (not bool(mute_raw)) if on_means_unmuted and mute_raw is not None else bool(mute_raw) if mute_raw is not None else None
             rows.append({**strip, "fader_path": fader_path, "mute_path": mute_path, "db": db, "position": db_to_x32_fader(db) if db is not None else 0, "muted": muted, "online": raw is not None or mute_raw is not None})
         return {"connected": bool(values), "model": self.model, "host": self.host, "strips": rows}

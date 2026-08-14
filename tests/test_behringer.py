@@ -2,8 +2,9 @@ from __future__ import annotations
 
 import math
 import unittest
+from unittest.mock import patch
 
-from app.modules.behringer import db_to_x32_fader, osc_message, parse_osc, strip_paths, x32_fader_to_db
+from app.modules.behringer import BehringerClient, _osc_scalar, db_to_x32_fader, osc_message, parse_osc, strip_paths, x32_fader_to_db
 
 
 class BehringerModuleTests(unittest.TestCase):
@@ -27,6 +28,18 @@ class BehringerModuleTests(unittest.TestCase):
         address, value = parse_osc(osc_message("/ch/01/mix/fader", .75))[0]
         self.assertEqual(address, "/ch/01/mix/fader")
         self.assertAlmostEqual(value, .75)
+
+    def test_status_accepts_one_element_argument_arrays_from_console(self):
+        client = BehringerClient({"enabled": True, "model": "wing", "host": "192.0.2.10", "port": 2223})
+        strips = [{"id": "main", "label": "Main", "kind": "main", "number": 1}]
+        with patch.object(client, "_exchange", return_value={"/main/1/fdr": [0.0], "/main/1/mute": [True]}):
+            result = __import__("asyncio").run(client.status(strips))
+        self.assertTrue(result["connected"])
+        self.assertEqual(result["strips"][0]["db"], 0.0)
+        self.assertTrue(result["strips"][0]["muted"])
+
+    def test_osc_scalar_unwraps_nested_argument_arrays(self):
+        self.assertEqual(_osc_scalar([[0.5]]), 0.5)
 
 
 if __name__ == "__main__":

@@ -81,7 +81,7 @@ BUILTIN_MODULES = [
         "configuration_path": "/modules#open-sound-meter", "documentation": "/docs/OPEN_SOUND_METER.md", "frontend": {"renderer": "legacy-adapter"},
     },
     {
-        "id": "behringer-mixer", "name": "Behringer X32 / WING", "vendor": "Behringer / Midas", "version": "1.0.0",
+        "id": "behringer-mixer", "name": "Behringer X32 / WING", "vendor": "Behringer / Midas", "version": "1.0.1",
         "description": "Touch-friendly X32, M32, and WING fader banks with live console feedback, channel sends, and mute control.", "category": "Audio control",
         "settings_key": "behringer", "dependencies": [], "provides": ["churchboard.mixer-control/v1"], "consumes": [],
         "widgets": [widget("behringer_faders", "Behringer faders", "Audio & streaming", 6, 5, strips=[{"id": "main-lr", "label": "MAIN LR", "kind": "main", "number": 1}])], "pages": [],

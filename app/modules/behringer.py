@@ -94,6 +94,18 @@ def _osc_scalar(value: Any) -> Any:
     return value
 
 
+def _wing_osc_value(value: Any) -> Any:
+    """Extract WING's actual value from its rich OSC reply.
+
+    WING float replies are normally ``[display, normalized, actual]`` and
+    integer replies are ``[display, normalized, actual]``.  The last argument
+    is the value applications must use and send back for precise control.
+    """
+    while isinstance(value, (list, tuple)) and value:
+        value = value[-1]
+    return value
+
+
 def strip_paths(model: str, strip: dict[str, Any]) -> tuple[str, str, bool]:
     model = str(model or "x32").casefold()
     kind = str(strip.get("kind") or "channel").casefold()
@@ -130,13 +142,16 @@ class BehringerClient:
     def _exchange(self, paths: list[str], writes: list[tuple[str, float | int]] | None = None) -> dict[str, Any]:
         answers: dict[str, Any] = {}
         with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
-            sock.settimeout(.04)
+            sock.settimeout(.08)
             for address, value in writes or []:
                 sock.sendto(osc_message(address, value), (self.host, self.port))
-            for address in dict.fromkeys(paths):
+            unique_paths = list(dict.fromkeys(paths))
+            for index, address in enumerate(unique_paths):
                 sock.sendto(osc_message(address), (self.host, self.port))
-            deadline = time.monotonic() + .24
-            while time.monotonic() < deadline and len(answers) < len(set(paths)):
+                if index and index % 12 == 0:
+                    time.sleep(.004)
+            deadline = time.monotonic() + max(.35, min(1.0, len(unique_paths) * .035))
+            while time.monotonic() < deadline and len(answers) < len(unique_paths):
                 try:
                     packet, _ = sock.recvfrom(65535)
                 except socket.timeout:
@@ -154,11 +169,12 @@ class BehringerClient:
         rows = []
         for strip in strips:
             fader_path, mute_path, on_means_unmuted = strip_paths(self.model, strip)
-            raw = _osc_scalar(values.get(fader_path))
+            extractor = _wing_osc_value if self.model == "wing" else _osc_scalar
+            raw = extractor(values.get(fader_path))
             db = float(raw) if self.model == "wing" and raw is not None else x32_fader_to_db(float(raw)) if raw is not None else None
             if db is not None and not math.isfinite(db):
                 db = -100.0
-            mute_raw = _osc_scalar(values.get(mute_path))
+            mute_raw = extractor(values.get(mute_path))
             muted = (not bool(mute_raw)) if on_means_unmuted and mute_raw is not None else bool(mute_raw) if mute_raw is not None else None
             rows.append({**strip, "fader_path": fader_path, "mute_path": mute_path, "db": db, "position": db_to_x32_fader(db) if db is not None else 0, "muted": muted, "online": raw is not None or mute_raw is not None})
         return {"connected": bool(values), "model": self.model, "host": self.host, "strips": rows}

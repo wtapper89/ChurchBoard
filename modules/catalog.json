@@ -3,12 +3,12 @@
   "modules": [
     {
       "id": "behringer-mixer",
-      "version": "1.0.1",
+      "version": "1.0.2",
       "files": [
         {
           "path": "behringer.py",
           "url": "https://raw.githubusercontent.com/wtapper89/ChurchBoard/main/app/modules/behringer.py",
-          "sha256": "0a6c77fd4bbba51ee4067edd39b88e39d79ec038eb5737dc05a036616a000f63"
+          "sha256": "d91cd6dff1ce37aa9148082a02c2224c4172b1f1d9ed4d54a8cf60d888eb2f55"
         }
       ]
     }

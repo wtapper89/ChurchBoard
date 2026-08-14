@@ -33,6 +33,7 @@ from app.modules.livekit import HostedIntercomServer
 from app.modules.prodmesh_rta import ProdMeshRTAClient
 from app.modules.prodmesh_host import HostedProdMeshRTA
 from app.modules.behringer import BehringerClient, db_to_x32_fader
+from app.modules.updates import ModulePackageManager
 from app.store import ConfigStore
 
 
@@ -65,10 +66,23 @@ class RuntimeService:
         self._last_prodmesh_report_at = 0.0
         self._behringer_client: BehringerClient | None = None
         self._behringer_key: tuple[Any, ...] | None = None
+        self.module_updates = ModulePackageManager(store.path.parent)
         self.prodmesh_host = HostedProdMeshRTA()
         self.media_cache = PlanningCenterMediaCache(store.path)
         self.ndi = NDIRuntime()
         self.intercom = HostedIntercomServer(store.path)
+
+    def reload_module(self, module_id: str) -> None:
+        """Drop cached clients so an updated module is used on the next poll."""
+        if module_id == "behringer-mixer":
+            self._behringer_client = None
+            self._behringer_key = None
+
+    def behringer_client(self, settings: dict[str, Any]) -> BehringerClient:
+        client_type = self.module_updates.load_class(
+            "behringer-mixer", "behringer.py", "BehringerClient", BehringerClient
+        )
+        return client_type(settings)
 
     @staticmethod
     def _manual_service_time_id(config: dict[str, Any], service: dict[str, Any] | None) -> str:
@@ -278,7 +292,8 @@ class RuntimeService:
         behringer_settings = config.get("behringer", {})
         behringer_key = (bool(behringer_settings.get("enabled")), str(behringer_settings.get("model") or "x32"), str(behringer_settings.get("host") or ""), int(behringer_settings.get("port") or 10023))
         if self._behringer_client is None or behringer_key != self._behringer_key:
-            self._behringer_client, self._behringer_key = BehringerClient(behringer_settings), behringer_key
+            client_type = self.module_updates.load_class("behringer-mixer", "behringer.py", "BehringerClient", BehringerClient)
+            self._behringer_client, self._behringer_key = client_type(behringer_settings), behringer_key
         behringer_due = clock - self._last_refresh["behringer"] >= max(.12, float(behringer_settings.get("refresh_seconds") or .2))
         if self._behringer_client.configured and configured_behringer_strips and (force or behringer_due):
             self._last_refresh["behringer"] = clock

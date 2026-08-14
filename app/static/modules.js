@@ -4,13 +4,13 @@ let selectedModule=null;
 const iconFor=module=>({Core:"▦","Planning & people":"P",Presentation:"▶",Interactions:"↔","Wireless audio":"⌁","Audio measurement":"dB",Streaming:"●",Video:"▣",Producer:"P"})[module.category]||"＋";
 const moduleById=id=>moduleItems.find(module=>module.id===id);
 
-async function loadModules(message=""){
+async function loadModules(message="",refresh=false){
   try{
-    const result=await api("/api/modules");
+    const result=await api(`/api/modules${refresh?"?refresh=1":""}`);
     moduleItems=result.items||[];
     renderModuleFilters();
     renderModules();
-    if(message)document.querySelector("#module-status").textContent=message;
+    if(message)document.querySelector("#module-status").textContent=result.remote?.error||message;
   }catch(error){
     if(/sign|unauthorized|401/i.test(error.message)){location.href="/login?next=%2Fmodules";return}
     document.querySelector("#module-status").textContent=error.message;
@@ -92,7 +92,7 @@ document.addEventListener("click",event=>{
 });
 document.addEventListener("change",async event=>{const policy=event.target.closest("[data-module-auto-update]");if(!policy)return;try{await api(`/api/modules/${encodeURIComponent(policy.dataset.moduleAutoUpdate)}/policy`,{method:"PUT",body:JSON.stringify({auto_update:policy.checked})});await loadModules()}catch(error){document.querySelector("#module-status").textContent=error.message}});
 for(const id of ["module-search","module-category","module-installed-only"])document.querySelector(`#${id}`).addEventListener(id==="module-search"?"input":"change",renderModules);
-document.querySelector("#module-refresh").onclick=()=>loadModules("Module catalog checked. Installed modules are current when no update badge appears.");
+document.querySelector("#module-refresh").onclick=()=>loadModules("Module catalog checked. Installed modules are current when no update badge appears.",true);
 function closeModuleDialog(){document.querySelector("#module-details").close();history.replaceState(null,"",location.pathname+location.search)}
 document.querySelector("#module-detail-close").onclick=closeModuleDialog;
 document.querySelector("#module-details").addEventListener("close",()=>{if(location.hash)history.replaceState(null,"",location.pathname+location.search)});

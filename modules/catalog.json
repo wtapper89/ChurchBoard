@@ -1,0 +1,16 @@
+{
+  "schema": 1,
+  "modules": [
+    {
+      "id": "behringer-mixer",
+      "version": "1.0.1",
+      "files": [
+        {
+          "path": "behringer.py",
+          "url": "https://raw.githubusercontent.com/wtapper89/ChurchBoard/main/app/modules/behringer.py",
+          "sha256": "0a6c77fd4bbba51ee4067edd39b88e39d79ec038eb5737dc05a036616a000f63"
+        }
+      ]
+    }
+  ]
+}

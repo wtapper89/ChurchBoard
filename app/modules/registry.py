@@ -3,8 +3,11 @@ from __future__ import annotations
 from copy import deepcopy
 from datetime import datetime, timezone
 from typing import Any
+from pathlib import Path
+import json
 
 from app.modules.builtin import BUILTIN_MODULES
+from app.modules.updates import ModulePackageManager, ModuleUpdateError
 
 
 def _version_key(value: str) -> tuple[int, ...]:
@@ -24,8 +27,31 @@ class ModuleRegistry:
     hard-coded integration branch to the ChurchBoard shell.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, data_dir=None, module_dirs=None) -> None:
         self._catalog = {item["id"]: deepcopy(item) for item in BUILTIN_MODULES}
+        self.updater = ModulePackageManager(data_dir) if data_dir is not None else None
+        self._remote: dict[str, dict[str, Any]] = {}
+        self._discover_local_modules(module_dirs)
+
+    def _discover_local_modules(self, module_dirs=None) -> None:
+        """Add developer modules dropped into a modules/ directory.
+
+        A local manifest is intentionally additive: bundled modules remain the
+        safe fallback, while new module IDs become installable immediately.
+        """
+        roots = [Path(item) for item in (module_dirs or [])]
+        for root in roots:
+            if not root.is_dir():
+                continue
+            for manifest_path in root.glob("*/manifest.json"):
+                try:
+                    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+                    module_id = str(manifest.get("id") or manifest_path.parent.name).strip()
+                    if module_id and module_id not in self._catalog:
+                        manifest["id"] = module_id
+                        self._catalog[module_id] = manifest
+                except (OSError, json.JSONDecodeError, TypeError):
+                    continue
 
     def manifest(self, module_id: str) -> dict[str, Any]:
         manifest = self._catalog.get(module_id)
@@ -142,6 +168,9 @@ class ModuleRegistry:
             state = installed.get(module_id) or {}
             installed_version = str(state.get("version") or "")
             available_version = str(manifest.get("version") or "0")
+            remote = self._remote.get(module_id) or {}
+            if _version_key(str(remote.get("version") or "0")) > _version_key(available_version):
+                available_version = str(remote["version"])
             item = deepcopy(manifest)
             item.update({
                 "installed": module_id in installed,
@@ -150,6 +179,7 @@ class ModuleRegistry:
                 "available_version": available_version,
                 "update_available": bool(installed_version and _version_key(available_version) > _version_key(installed_version)),
                 "auto_update": bool(state.get("auto_update", True)),
+                "remote_update": bool(remote),
             })
             results.append(item)
         return results
@@ -198,7 +228,29 @@ class ModuleRegistry:
     def update(self, data: dict[str, Any], module_id: str) -> None:
         if module_id not in self._catalog:
             raise KeyError(module_id)
+        remote = self._remote.get(module_id)
+        if remote and self.updater is not None:
+            self.updater.update(module_id, remote)
+            self.reconcile(data)
+            data["modules"]["installed"].setdefault(module_id, {})["version"] = str(remote["version"])
+            data["modules"]["installed"][module_id]["updated_at"] = datetime.now(timezone.utc).isoformat()
+            return
         self.install(data, module_id)
+
+    def refresh_remote(self) -> dict[str, Any]:
+        if self.updater is None:
+            return {"updated": False, "error": "Module updates are unavailable in this runtime"}
+        try:
+            payload = self.updater.catalog()
+            self._remote = {str(item.get("id")): item for item in payload.get("modules", []) if item.get("id")}
+            # A catalog can introduce a brand-new module; no core release is
+            # required for it to appear in Setup and become installable.
+            for module_id, manifest in self._remote.items():
+                if module_id not in self._catalog:
+                    self._catalog[module_id] = deepcopy(manifest)
+            return {"updated": True, "modules": sorted(self._remote)}
+        except ModuleUpdateError as exc:
+            return {"updated": False, "error": str(exc)}
 
     def set_auto_update(self, data: dict[str, Any], module_id: str, enabled: bool) -> None:
         self.reconcile(data)

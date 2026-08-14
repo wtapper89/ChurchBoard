@@ -26,6 +26,7 @@ from app.config import ROOT_DIR, load_config
 from app.auth import AuthManager, password_hash, public_user, require_role, require_user
 from app.models import Dashboard, SettingsUpdate
 from app.modules import ModuleRegistry
+from app.modules.updates import ModuleUpdateError
 from app.producer import add_activity, producer_context, save_resource, save_template, set_completion
 from app.modules.runtime import RuntimeService
 from app.modules.spl_reports import SPLReportStore
@@ -146,7 +147,10 @@ class ModulePolicyRequest(BaseModel):
 async def lifespan(app: FastAPI):
     config = load_config()
     store = ConfigStore(config.data_file)
-    modules = ModuleRegistry()
+    modules = ModuleRegistry(
+        config.data_file.parent,
+        module_dirs=[ROOT_DIR / "modules", config.data_file.parent / "modules"],
+    )
     module_data = store.load()
     if modules.reconcile(module_data):
         store.save(module_data)
@@ -369,15 +373,16 @@ async def module_frontend_catalog(request: Request) -> dict:
 
 
 @app.get("/api/modules")
-async def module_catalog(request: Request) -> dict:
+async def module_catalog(request: Request, refresh: bool = False) -> dict:
     require_role(request, "admin")
     store = store_from(request)
     data = store.load()
     modules: ModuleRegistry = request.app.state.modules
+    remote = modules.refresh_remote() if refresh else None
     changed = modules.reconcile(data)
     if changed:
         store.save(data)
-    return {"items": modules.catalog(data)}
+    return {"items": modules.catalog(data), "remote": remote}
 
 
 @app.post("/api/modules/{module_id}/install")
@@ -390,6 +395,8 @@ async def install_module(module_id: str, request: Request) -> dict:
         added = modules.install(data, module_id)
     except KeyError:
         raise HTTPException(404, "Module not found")
+    except ModuleUpdateError as exc:
+        raise HTTPException(502, str(exc)) from exc
     store.save(data)
     return {"installed": added, "items": modules.catalog(data)}
 
@@ -402,6 +409,7 @@ async def update_module(module_id: str, request: Request) -> dict:
     modules: ModuleRegistry = request.app.state.modules
     try:
         modules.update(data, module_id)
+        request.app.state.runtime.reload_module(module_id)
     except KeyError:
         raise HTTPException(404, "Module not found")
     store.save(data)
@@ -1169,7 +1177,7 @@ def behringer_widget_strip(request: Request, dashboard_slug: str, widget_id: str
 async def control_behringer(payload: BehringerControlRequest, request: Request) -> dict:
     strip = behringer_widget_strip(request, payload.dashboard_slug, payload.widget_id, payload.strip_id)
     settings = store_from(request).load()["settings"].get("behringer", {})
-    client = BehringerClient(settings)
+    client = request.app.state.runtime.behringer_client(settings)
     if not client.configured:
         raise HTTPException(400, "Enable the Behringer module and save the console address first")
     if payload.level_db is None and payload.muted is None:
@@ -1185,7 +1193,7 @@ async def control_behringer(payload: BehringerControlRequest, request: Request) 
 async def test_behringer(request: Request) -> dict:
     require_role(request, "admin", "editor")
     settings = store_from(request).load()["settings"].get("behringer", {})
-    client = BehringerClient(settings)
+    client = request.app.state.runtime.behringer_client(settings)
     if not client.configured:
         raise HTTPException(400, "Enable the Behringer module and save the console address first")
     probe = {"id": "test-main", "label": "Main LR", "kind": "main", "number": 1}

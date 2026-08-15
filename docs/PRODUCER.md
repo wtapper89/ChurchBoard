@@ -1,6 +1,6 @@
 # Producer workspace
 
-ChurchBoard 1.5 beta extends the display system into a service-production workspace while retaining the existing local, no-login behavior until an owner account is created.
+ChurchBoard extends the display system into a service-production workspace while retaining the existing local, no-login behavior until an owner account is created.
 
 ChurchBoard selects the current Planning Center service time automatically, not only the service plan. This matters when a position has a different person at an early, middle, or late service. Administrators and editors can override the time from the Producer service-time menu; returning it to **Automatic for current time** resumes time-based selection.
 
@@ -33,6 +33,26 @@ The active service chooser at the top of Producer lists all plans currently retu
 Admins and editors also have an **Audio history** tab. When ProdMesh RTA or Open Sound Meter reporting is enabled, ChurchBoard stores readings locally and groups them by Planning Center service time and active item. This keeps separate services separate even when they share the same plan. The tab shows a graph and minimum, average, and maximum for every song or item, with downloadable graph and CSV copies.
 
 Checklist templates use the position keys returned by the configured Planning Center Services plan. A template can therefore follow whoever is scheduled as `Band · Vox 1`, `Production · Audio`, or another selected position instead of being tied permanently to one person.
+
+## Personal in-ear monitor mixes
+
+Producer can give a scheduled musician direct access to the console bus mapped to their Planning Center position. The position card shows **Adjust mix** when its position has a personal-monitor bus. Administrators and editors can open any scheduled person's mix; volunteers can open their own mapped mix.
+
+The full-page mix provides large touch targets, horizontally scrollable channel strips, live level readback, and a yellow **On** state for each source in that mix. Changes made at the physical console are reflected in ChurchBoard, and changes made in ChurchBoard are sent back to the console. ChurchBoard automatically remembers the volunteer's levels, On states, and preferred channel order. On a later service, **Use my settings** reapplies their saved mix without replacing the default channel list chosen by the administrator.
+
+Personal mixes currently support:
+
+- Behringer X32 and X32-family consoles;
+- Behringer WING, WING Compact, and WING Rack; and
+- Midas M32 consoles.
+
+Support for other console families is in development. Churches with other mixers can help by testing new modules on a safe production network or contributing a mixer module using the [module development guide](MODULE_DEVELOPMENT.md). Never expose a mixer's control port directly to the public internet.
+
+![Producer personal in-ear monitor mix on a desktop](screenshots/producer-in-ear-mix-desktop.png)
+
+The same mix becomes a swipeable phone interface; touching a fader adjusts it while swiping between strips reveals additional channels.
+
+![Producer personal in-ear monitor mix on a phone](screenshots/producer-in-ear-mix-mobile.png)
 
 ## Position checklists and resources
 
@@ -74,4 +94,4 @@ On the same trusted network, open `https://churchboard-hostname:8040/producer` f
 
 ## Current scope
 
-ChurchBoard 1.5 beta uses local accounts and local resource storage. Invitation email, password-reset email, SSO, directory synchronization, aggregate reporting, and cloud storage are not included. Back up the ChurchBoard data directory and export layouts regularly.
+ChurchBoard uses local accounts and local resource storage. Invitation email, password-reset email, SSO, directory synchronization, aggregate reporting, and cloud storage are not included. Back up the ChurchBoard data directory and export layouts regularly.

@@ -44,6 +44,7 @@ See ChurchBoard in action and follow the setup walkthrough in the **[ChurchBoard
 - A scrollable, resizable sermon-notes widget that selects a named note field from a Planning Center service item
 - A dedicated ProPresenter control pad for previous/next slide and previous/next playlist item
 - A mobile-friendly Producer workspace for position checklists, Planning Center tagged media, embedded resources, files, links, team access, campuses, and an activity trail
+- Personal in-ear monitor mixes in Producer, with touch-friendly faders, live console readback, per-channel On controls, remembered channel order, and reusable volunteer settings
 - Automatic or manual Planning Center service-time selection, including a different scheduled person in the same position at different services
 - Optional NDI® source discovery and video widgets that dynamically load the licensed NDI runtime without requiring NDI Tools
 - A restricted second listener for volunteer checklists and Producer tools, with Planning Center tagged media mirrored locally instead of reopening Planning Center
@@ -123,11 +124,13 @@ Open `/producer` to manage the selected service and service time, position check
 
 ![ChurchBoard Producer workspace](docs/screenshots/producer-workspace.jpg)
 
-The Producer workflow is responsive for phones and tablets, keeping service selection, status, scheduled positions, checklists, and resources touch-friendly on the production network.
+The Producer workflow is responsive for phones and tablets, keeping service selection, status, scheduled positions, checklists, resources, and personal monitor mixes touch-friendly on the production network. Personal mixes currently support Behringer X32, Behringer WING-family, and Midas M32 consoles. Support for additional mixer families is in development; testers and module developers with access to other consoles are welcome.
 
-| Phone workflow | Tablet workflow |
-| --- | --- |
-| ![ChurchBoard Producer position workflow on a phone](docs/screenshots/producer-mobile-phone.jpg) | ![ChurchBoard Producer position workflow on a tablet](docs/screenshots/producer-mobile-tablet.jpg) |
+![ChurchBoard Producer personal in-ear monitor mix](docs/screenshots/producer-in-ear-mix-desktop.png)
+
+| Phone workflow | Tablet workflow | Phone personal mix |
+| --- | --- | --- |
+| ![ChurchBoard Producer position workflow on a phone](docs/screenshots/producer-mobile-phone.jpg) | ![ChurchBoard Producer position workflow on a tablet](docs/screenshots/producer-mobile-tablet.jpg) | ![ChurchBoard Producer personal monitor mix on a phone](docs/screenshots/producer-in-ear-mix-mobile.png) |
 
 ## Credits, licenses, and legal
 

@@ -59,28 +59,27 @@ Choose your computer and click its download link:
 
 | Your computer | Download |
 | --- | --- |
-| **Windows 10 or 11** | **[Download the Windows installer (.exe)](https://github.com/wtapper89/ChurchBoard/releases/latest/download/ChurchBoard-2.0.3-Windows-x64-Setup.exe)** |
-| **Mac with Apple silicon** — M1 or newer | **[Download the Apple silicon Mac disk image (.dmg)](https://github.com/wtapper89/ChurchBoard/releases/latest/download/ChurchBoard-2.0.3-macOS-arm64.dmg)** |
-| **Mac with an Intel processor** | **[Download the Intel Mac disk image (.dmg)](https://github.com/wtapper89/ChurchBoard/releases/latest/download/ChurchBoard-2.0.3-macOS-x86_64.dmg)** |
-| **Ubuntu or Debian Linux** | **[Download the Linux installer (.deb)](https://github.com/wtapper89/ChurchBoard/releases/latest/download/ChurchBoard-2.0.3-Linux-amd64.deb)** |
-| **Other 64-bit desktop Linux** | **[Download the portable Linux package (.tar.gz)](https://github.com/wtapper89/ChurchBoard/releases/latest/download/ChurchBoard-2.0.3-Linux-x86_64.tar.gz)** |
+| **Windows 10 or 11** | **[Download the Windows installer (.exe)](https://github.com/wtapper89/ChurchBoard/releases/latest/download/ChurchBoard-2.0.4-Windows-x64-Setup.exe)** |
+| **Mac with Apple silicon** — M1 or newer | **[Download the Apple silicon Mac disk image (.dmg)](https://github.com/wtapper89/ChurchBoard/releases/latest/download/ChurchBoard-2.0.4-macOS-arm64.dmg)** |
+| **Mac with an Intel processor** | **[Download the Intel Mac disk image (.dmg)](https://github.com/wtapper89/ChurchBoard/releases/latest/download/ChurchBoard-2.0.4-macOS-x86_64.dmg)** |
+| **Ubuntu or Debian Linux** | **[Download the Linux installer (.deb)](https://github.com/wtapper89/ChurchBoard/releases/latest/download/ChurchBoard-2.0.4-Linux-amd64.deb)** |
+| **Other 64-bit desktop Linux** | **[Download the portable Linux package (.tar.gz)](https://github.com/wtapper89/ChurchBoard/releases/latest/download/ChurchBoard-2.0.4-Linux-x86_64.tar.gz)** |
 
 Not sure which Mac you have? Choose **Apple menu → About This Mac**. If it says **Chip**, use Apple silicon. If it says **Processor**, use Intel.
 
 **Raspberry Pi:** jump to the [one-command Raspberry Pi installer](#raspberry-pi).
 
-[View all v2.0.3 downloads and release notes](https://github.com/wtapper89/ChurchBoard/releases/tag/v2.0.3)
+[View all v2.0.4 downloads and release notes](https://github.com/wtapper89/ChurchBoard/releases/tag/v2.0.4)
 
-### What's new in 2.0.3
+### What's new in 2.0.4
 
-- Fixes certificate verification for module catalog and module file downloads in packaged apps.
-- Includes Behringer module 1.0.2 with corrected WING fader and mute synchronization.
-
-- Trigger all or selected ProPresenter macros from a dedicated, touch-friendly dashboard widget.
-- Keep ProPresenter macros and timers visible when slides or all layers are cleared.
-- Navigate between a selected set of boards with custom labels and reliable single-click activation.
-- Edit the live board in place with a slide-in palette, real data, and a save action that returns directly to the display.
-- Use crisp, ChurchBoard-styled initials when a scheduled person has no profile photo.
+- Adds full-page personal monitor mixes with live, bidirectional X32/M32/WING levels and On states.
+- Lets administrators and editors open any scheduled person’s mapped mix and lets volunteers recall saved personal settings.
+- Improves Order of Service readability, multiple colored Planning Center note fields, and multiple leaders with individually matched microphones.
+- Makes fitted service orders prioritize readable current and upcoming information rather than shrinking the complete plan.
+- Uses live console channel names on Behringer dashboard and personal-mix faders.
+- Improves touch and mouse fader handling, reliable negative-infinity positioning, and mobile horizontal scrolling.
+- Simplifies module setup and adds safer independently updateable module support.
 
 ## Install
 

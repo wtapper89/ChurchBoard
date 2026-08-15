@@ -5,7 +5,7 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 from fastapi.testclient import TestClient
 
@@ -76,13 +76,18 @@ class ApiTests(unittest.TestCase):
         self.assertIn('settings.slide_layout==="previews_only"', common_script)
         self.assertIn('settings.show_title===false', common_script)
         self.assertIn('full-service-order-list', common_script)
+        self.assertIn('order-production-note', common_script)
+        self.assertIn('class="order-timing"', common_script)
         self.assertIn('order_display_mode', self.client.get("/static/editor.js").text)
+        self.assertIn('production_note_field', self.client.get("/static/editor.js").text)
         self.assertIn('method:"DELETE"', self.client.get("/static/editor.js").text)
         self.assertIn('name="assignment_grouping"', self.client.get("/static/editor.js").text)
         self.assertIn('settings.card_grouping!=="position"', common_script)
         self.assertNotIn('talent-channel"><strong>', common_script)
         stylesheet = self.client.get("/static/style.css").text
         self.assertIn('mask:url("/static/churchboard-mark.svg")', stylesheet)
+        self.assertIn('.monitor-mix-dialog', stylesheet)
+        self.assertIn('width:54px;height:42px', stylesheet)
         mark = self.client.get("/static/churchboard-mark.svg")
         self.assertEqual(mark.status_code, 200)
         self.assertIn("<svg", mark.text)
@@ -106,6 +111,11 @@ class ApiTests(unittest.TestCase):
         self.assertEqual(blocked.status_code, 400)
         self.assertIn("require ProPresenter", blocked.json()["detail"])
         self.assertEqual(self.client.delete("/api/modules/services-live-bridge").status_code, 204)
+        self.assertTrue(items["producer"]["installed"])
+        self.assertEqual(self.client.delete("/api/modules/producer").status_code, 204)
+        producer = {item["id"]: item for item in self.client.get("/api/modules").json()["items"]}["producer"]
+        self.assertFalse(producer["installed"])
+        self.assertIn("data-producer-module-link", self.client.get("/static/desktop.js").text)
 
     def test_page_save_installs_widget_module(self):
         data = self.client.app.state.store.load()
@@ -172,6 +182,43 @@ class ApiTests(unittest.TestCase):
             "campus_ids": ["main"], "planning_center_person_id": "person-1",
         })
         self.assertEqual(user.status_code, 201)
+
+    def test_scheduled_user_can_control_only_their_mapped_monitor_mix(self):
+        self.assertEqual(self.client.post("/api/auth/bootstrap", json={
+            "name": "Jordan Lee", "email": "jordan@example.test", "password": "test",
+        }).status_code, 200)
+        data = self.client.app.state.store.load()
+        data["settings"]["behringer"].update({
+            "enabled": True, "host": "192.168.1.70", "model": "x32", "port": 10023,
+            "position_buses": [{"position_key": "band::Vox 1", "bus": 3}],
+            "monitor_channels": [{"number": 1, "label": "Worship Leader"}, {"number": 9, "label": "Click"}],
+        })
+        self.client.app.state.store.save(data)
+        self.client.app.state.runtime.state["people"] = [{
+            "person_id": "person-jordan", "name": "Jordan Lee", "position_keys": ["band::Vox 1"],
+        }]
+        console = MagicMock(configured=True)
+        console.status = AsyncMock(return_value={"connected": True, "strips": [
+            {"number": 1, "label": "Worship Leader", "db": -10, "muted": False},
+            {"number": 9, "label": "Click", "db": -20, "muted": False},
+        ]})
+        console.control = AsyncMock()
+        with patch.object(self.client.app.state.runtime, "behringer_client", return_value=console):
+            mix = self.client.get("/api/producer/monitor-mix")
+            self.assertEqual(mix.status_code, 200)
+            self.assertEqual(mix.json()["bus"], 3)
+            changed = self.client.put("/api/producer/monitor-mix", json={"data": {"channel": 1, "level_db": -6}})
+            self.assertEqual(changed.status_code, 200)
+            console.control.assert_awaited_once()
+            saved = self.client.get("/api/producer/monitor-mix").json()["saved_settings"]
+            self.assertTrue(saved["available"])
+            self.assertEqual(saved["levels"], {"1": -6.0})
+            applied = self.client.put("/api/producer/monitor-mix", json={"data": {"use_saved": True}})
+            self.assertEqual(applied.status_code, 200)
+            self.assertEqual(applied.json()["applied"], {"1": -6.0})
+            self.assertEqual(console.control.await_count, 2)
+            blocked = self.client.put("/api/producer/monitor-mix", json={"data": {"channel": 2, "level_db": -6}})
+            self.assertEqual(blocked.status_code, 403)
 
     def test_producer_account_admin_service_selection_and_passwordless_login(self):
         owner = self.client.post("/api/auth/bootstrap", json={

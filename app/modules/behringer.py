@@ -127,6 +127,19 @@ def strip_paths(model: str, strip: dict[str, Any]) -> tuple[str, str, bool]:
     return f"{root}/mix/fader", f"{root}/mix/on", True
 
 
+def strip_name_path(model: str, strip: dict[str, Any]) -> str | None:
+    """Return the console scribble-strip name path for a configured control."""
+    kind = str(strip.get("kind") or "channel").casefold()
+    number = max(1, int(strip.get("number") or 1))
+    if kind == "send":
+        kind = "channel"
+    if model == "wing":
+        root = {"channel": "ch", "aux": "aux", "bus": "bus", "dca": "dca"}.get(kind)
+        return f"/{root}/{number}/name" if root else None
+    root = {"channel": "ch", "aux": "auxin", "bus": "bus", "dca": "dca"}.get(kind)
+    return f"/{root}/{number:02d}/config/name" if root else None
+
+
 class BehringerClient:
     def __init__(self, settings: dict[str, Any]):
         self.settings = settings
@@ -163,7 +176,7 @@ class BehringerClient:
     async def status(self, strips: list[dict[str, Any]]) -> dict[str, Any]:
         if not self.configured:
             return {"connected": False, "error": "Behringer mixer is not enabled", "strips": []}
-        paths = [path for strip in strips for path in strip_paths(self.model, strip)[:2]]
+        paths = [path for strip in strips for path in (*strip_paths(self.model, strip)[:2], strip_name_path(self.model, strip)) if path]
         async with self._lock:
             values = await asyncio.to_thread(self._exchange, paths)
         rows = []
@@ -176,8 +189,33 @@ class BehringerClient:
                 db = -100.0
             mute_raw = extractor(values.get(mute_path))
             muted = (not bool(mute_raw)) if on_means_unmuted and mute_raw is not None else bool(mute_raw) if mute_raw is not None else None
-            rows.append({**strip, "fader_path": fader_path, "mute_path": mute_path, "db": db, "position": db_to_x32_fader(db) if db is not None else 0, "muted": muted, "online": raw is not None or mute_raw is not None})
+            name_path = strip_name_path(self.model, strip)
+            name_value = _wing_osc_value(values.get(name_path)) if self.model == "wing" and name_path else _osc_scalar(values.get(name_path)) if name_path else None
+            console_label = str(name_value or "").strip()
+            rows.append({**strip, "console_label": console_label, "fader_path": fader_path, "mute_path": mute_path, "db": db, "position": db_to_x32_fader(db) if db is not None else 0, "muted": muted, "online": raw is not None or mute_raw is not None})
         return {"connected": bool(values), "model": self.model, "host": self.host, "strips": rows}
+
+    async def catalog(self) -> dict[str, Any]:
+        """Read channel and mix-bus scribble-strip names from the console."""
+        if not self.configured:
+            return {"connected": False, "channels": [], "buses": []}
+        channel_count = 48 if self.model == "wing" else 32
+        bus_count = 16
+        channel_paths = [f"/ch/{number}/name" if self.model == "wing" else f"/ch/{number:02d}/config/name" for number in range(1, channel_count + 1)]
+        bus_paths = [f"/bus/{number}/name" if self.model == "wing" else f"/bus/{number:02d}/config/name" for number in range(1, bus_count + 1)]
+        async with self._lock:
+            values = await asyncio.to_thread(self._exchange, channel_paths + bus_paths)
+
+        def console_name(value: Any, fallback: str) -> str:
+            candidates = list(value) if isinstance(value, (list, tuple)) else [value]
+            for candidate in reversed(candidates):
+                if isinstance(candidate, str) and candidate.strip():
+                    return candidate.strip()
+            return fallback
+
+        channels = [{"number": index + 1, "name": console_name(values.get(path), f"CH {index + 1}")} for index, path in enumerate(channel_paths)]
+        buses = [{"number": index + 1, "name": console_name(values.get(path), f"BUS {index + 1}")} for index, path in enumerate(bus_paths)]
+        return {"connected": bool(values), "model": self.model, "channels": channels, "buses": buses}
 
     async def control(self, strip: dict[str, Any], level_db: float | None = None, muted: bool | None = None) -> None:
         if not self.configured:

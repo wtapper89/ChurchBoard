@@ -15,7 +15,7 @@ DEFAULT_WIDGETS = [
     {"id": "timing", "type": "timing", "x": 8, "y": 0, "w": 4, "h": 2, "title": "Timing", "settings": {}},
     {"id": "assignments", "type": "assignments", "x": 0, "y": 2, "w": 7, "h": 6, "title": "Scheduled Positions & Mics", "settings": {"team_ids": [], "position_keys": [], "position_labels": {}, "positions": [], "display_mode": "photos", "card_grouping": "person", "use_planning_center_icon": False, "unassigned_media_title": "Icon"}},
     {"id": "slides", "type": "slides", "x": 7, "y": 2, "w": 5, "h": 4, "title": "ProPresenter", "settings": {"show_notes": True, "slide_mode": "image", "slide_layout": "full", "show_current": True, "show_next": True, "show_parts": True, "show_slide_count": False}},
-    {"id": "order", "type": "order", "x": 7, "y": 6, "w": 5, "h": 2, "title": "Order of Service", "settings": {"display_mode": "current", "limit": 6, "show_leader": False, "show_mic": False}},
+    {"id": "order", "type": "order", "x": 7, "y": 6, "w": 5, "h": 2, "title": "Order of Service", "settings": {"display_mode": "current", "limit": 6, "show_leader": False, "show_mic": False, "show_production_note": False, "production_note_field": "", "production_note_fields": [], "production_note_colors": {}}},
     {"id": "playlist", "type": "playlist", "x": 0, "y": 8, "w": 12, "h": 6, "title": "ProPresenter Playlist", "settings": {"allow_remote_trigger": True, "keyboard_control": False, "density": "comfortable", "auto_scroll": True, "active_border_color": "#f5c400"}},
 ]
 
@@ -64,7 +64,7 @@ def default_data() -> dict[str, Any]:
                 "source_id": "",
             },
             "prodmesh_rta": {"enabled": False, "mode": "embedded", "host": "", "port": 8517, "refresh_seconds": 0.1, "reports_enabled": True},
-            "behringer": {"enabled": False, "model": "x32", "host": "", "port": 10023, "refresh_seconds": 0.2},
+            "behringer": {"enabled": False, "model": "x32", "host": "", "port": 10023, "refresh_seconds": 0.2, "position_buses": [], "monitor_channels": [], "monitor_user_orders": {}, "monitor_user_levels": {}},
             "restream": {"enabled": False, "client_id": "", "client_secret": "", "access_token": "", "refresh_token": "", "access_token_expires_at": 0, "refresh_seconds": 5},
             "obs": {"enabled": False, "host": "127.0.0.1", "port": 4455, "password": "", "refresh_seconds": 0.5, "dropped_frames_threshold": 2, "preview_url": ""},
             "lighting": {"enabled": False, "host": "127.0.0.1", "port": 7348, "password": ""},
@@ -174,7 +174,7 @@ class ConfigStore:
                     if widget.get("type") == "ndi":
                         widget["settings"] = {"source_name": "", **widget.get("settings", {})}
                     if widget.get("type") == "order":
-                        widget["settings"] = {"display_mode": "current", "limit": 6, "show_leader": False, "show_mic": False, **widget.get("settings", {})}
+                        widget["settings"] = {"display_mode": "current", "limit": 6, "show_leader": False, "show_mic": False, "show_production_note": False, "production_note_field": "", "production_note_fields": [], "production_note_colors": {}, **widget.get("settings", {})}
                     if widget.get("type") == "spl":
                         widget["settings"] = {"green_max": 75, "orange_max": 85, "reports_enabled": True, **widget.get("settings", {})}
             baseline["dashboards"] = [dashboard for dashboard in baseline["dashboards"] if dashboard.get("id") != "service-producer"]

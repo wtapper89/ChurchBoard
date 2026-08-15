@@ -8,6 +8,8 @@ async function loadModules(message="",refresh=false){
   try{
     const result=await api(`/api/modules${refresh?"?refresh=1":""}`);
     moduleItems=result.items||[];
+    const producerInstalled=moduleItems.some(module=>module.id==="producer"&&module.installed&&module.enabled);
+    document.querySelectorAll("[data-producer-module-link]").forEach(element=>element.hidden=!producerInstalled);
     renderModuleFilters();
     renderModules();
     if(message)document.querySelector("#module-status").textContent=result.remote?.error||message;

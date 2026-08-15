@@ -811,6 +811,149 @@ async def get_producer_context(request: Request) -> dict:
     return producer_context(store_from(request), request.app.state.runtime.state, require_user(request))
 
 
+def producer_monitor_mix(request: Request, user: dict, target_person_id: str = "", target_position_key: str = "") -> tuple[dict, str, int, list[dict], str]:
+    data = store_from(request).load()
+    settings = data.get("settings", {}).get("behringer", {})
+    privileged = user.get("role") in {"admin", "editor"}
+    person_id = str(target_person_id if privileged and target_person_id else user.get("planning_center_person_id") or "")
+    user_name = "" if target_person_id and privileged else str(user.get("name") or "").casefold()
+    scheduled = [person for person in request.app.state.runtime.state.get("people", []) if (person_id and str(person.get("person_id") or person.get("id") or "") == person_id) or str(person.get("name") or "").casefold() == user_name]
+    allowed = {str(key) for person in scheduled for key in (person.get("position_keys") or [person.get("position_key")]) if key}
+    def positive_number(value: object) -> int:
+        try:
+            return max(0, int(value or 0))
+        except (TypeError, ValueError):
+            return 0
+
+    mappings = {
+        str(row.get("position_key") or ""): positive_number(row.get("bus"))
+        for row in settings.get("position_buses", [])
+        if row.get("position_key") and positive_number(row.get("bus"))
+    }
+    position_key = target_position_key if privileged and target_position_key in allowed and target_position_key in mappings else next((key for key in allowed if key in mappings), "")
+    channels = [
+        {"number": positive_number(row.get("number")), "label": str(row.get("label") or f"CH {row.get('number')}")}
+        for row in settings.get("monitor_channels", [])
+        if positive_number(row.get("number"))
+    ]
+    if not position_key:
+        raise HTTPException(404, "No personal monitor mix is mapped to your scheduled position")
+    target_user = next((item for item in data.get("users", []) if person_id and str(item.get("planning_center_person_id") or "") == person_id), None)
+    profile_key = str((target_user or {}).get("id") or (f"person:{person_id}" if person_id else user.get("id")))
+    return settings, position_key, mappings[position_key], channels, profile_key
+
+
+@app.get("/api/producer/monitor-mix")
+async def get_producer_monitor_mix(request: Request, person_id: str = "", position_key: str = "") -> dict:
+    user = require_user(request)
+    settings, position_key, bus, channels, profile_key = producer_monitor_mix(request, user, person_id, position_key)
+    order = []
+    for value in (settings.get("monitor_user_orders") or {}).get(profile_key, []):
+        try:
+            order.append(int(value))
+        except (TypeError, ValueError):
+            continue
+    channels.sort(key=lambda row: order.index(row["number"]) if row["number"] in order else len(order) + row["number"])
+    strips = [{"id": f"monitor-{row['number']}", "label": row["label"], "kind": "send", "number": row["number"], "target_bus": bus} for row in channels]
+    client = request.app.state.runtime.behringer_client(settings)
+    status = await client.status(strips) if client.configured else {"connected": False, "strips": strips}
+    preset = (((settings.get("monitor_user_levels") or {}).get(profile_key) or {}).get(position_key) or {})
+    saved_levels = {}
+    allowed_numbers = {row["number"] for row in channels}
+    for number, value in (preset.get("levels") or {}).items():
+        try:
+            saved_number, saved_level = int(number), float(value)
+        except (TypeError, ValueError):
+            continue
+        if saved_number in allowed_numbers:
+            saved_levels[str(saved_number)] = saved_level
+    return {
+        "position_key": position_key,
+        "bus": bus,
+        "connected": status.get("connected", False),
+        "strips": status.get("strips") or strips,
+        "saved_settings": {"available": bool(saved_levels), "levels": saved_levels, "ons": preset.get("ons") or {}, "updated_at": preset.get("updated_at")},
+    }
+
+
+@app.put("/api/producer/monitor-mix")
+async def update_producer_monitor_mix(payload: ProducerPayload, request: Request) -> dict:
+    user = require_user(request)
+    target_person_id = str(payload.data.get("person_id") or "")
+    target_position_key = str(payload.data.get("position_key") or "")
+    settings, position_key, bus, channels, profile_key = producer_monitor_mix(request, user, target_person_id, target_position_key)
+    allowed_channels = {row["number"]: row for row in channels}
+    order = payload.data.get("order")
+    if isinstance(order, list):
+        normalized = []
+        for value in order:
+            try:
+                channel_number = int(value)
+            except (TypeError, ValueError):
+                continue
+            if channel_number in allowed_channels:
+                normalized.append(channel_number)
+        data = store_from(request).load()
+        data.setdefault("settings", {}).setdefault("behringer", {}).setdefault("monitor_user_orders", {})[profile_key] = list(dict.fromkeys(normalized))
+        store_from(request).save(data)
+        return {"ok": True, "order": normalized}
+    client = request.app.state.runtime.behringer_client(settings)
+    if not client.configured:
+        raise HTTPException(409, "The audio console is not connected")
+    if payload.data.get("use_saved") is True:
+        preset = (((settings.get("monitor_user_levels") or {}).get(profile_key) or {}).get(position_key) or {})
+        saved_levels = []
+        for key, value in (preset.get("levels") or {}).items():
+            try:
+                saved_channel, saved_db = int(key), float(value)
+            except (TypeError, ValueError):
+                continue
+            if saved_channel in allowed_channels:
+                saved_levels.append((saved_channel, saved_db))
+        if not saved_levels:
+            raise HTTPException(404, "You do not have saved settings for this position yet")
+        try:
+            for saved_channel, saved_db in saved_levels:
+                saved_on = (preset.get("ons") or {}).get(str(saved_channel))
+                await client.control({"id": f"monitor-{saved_channel}", "label": allowed_channels[saved_channel]["label"], "kind": "send", "number": saved_channel, "target_bus": bus}, saved_db, None if saved_on is None else not bool(saved_on))
+        except Exception as exc:
+            raise HTTPException(502, f"Could not apply the saved monitor mix: {exc}") from exc
+        return {"ok": True, "position_key": position_key, "bus": bus, "applied": {str(number): level for number, level in saved_levels}}
+    channel = int(payload.data.get("channel") or 0)
+    if channel not in allowed_channels:
+        raise HTTPException(403, "That input is not available in your personal mix")
+    strip = {"id": f"monitor-{channel}", "label": allowed_channels[channel]["label"], "kind": "send", "number": channel, "target_bus": bus}
+    level_db = None
+    if "level_db" in payload.data:
+        try:
+            level_db = float(payload.data["level_db"])
+        except (TypeError, ValueError):
+            raise HTTPException(400, "Choose a monitor level")
+    on = payload.data.get("on") if "on" in payload.data else None
+    if level_db is None and on is None:
+        raise HTTPException(400, "Choose a monitor level or On state")
+    try:
+        await client.control(strip, level_db, None if on is None else not bool(on))
+    except Exception as exc:
+        raise HTTPException(502, f"Could not adjust the monitor mix: {exc}") from exc
+    data = store_from(request).load()
+    saved = data.setdefault("settings", {}).setdefault("behringer", {}).setdefault("monitor_user_levels", {}).setdefault(profile_key, {})
+    previous = saved.get(position_key) or {}
+    service_id = str(request.app.state.runtime.state.get("service", {}).get("id") or "")
+    history = list(previous.get("history") or [])
+    if previous.get("service_id") and str(previous.get("service_id")) != service_id and previous.get("levels"):
+        history.append({"service_id": previous.get("service_id"), "updated_at": previous.get("updated_at"), "levels": previous.get("levels")})
+    levels = dict(previous.get("levels") or {})
+    if level_db is not None:
+        levels[str(channel)] = level_db
+    ons = dict(previous.get("ons") or {})
+    if on is not None:
+        ons[str(channel)] = bool(on)
+    saved[position_key] = {"service_id": service_id, "updated_at": datetime.now(timezone.utc).isoformat(), "levels": levels, "ons": ons, "history": history[-12:]}
+    store_from(request).save(data)
+    return {"ok": True, "position_key": position_key, "bus": bus, "channel": channel, "saved": True}
+
+
 @app.get("/api/producer/intercom")
 async def get_intercom_configuration(request: Request) -> dict:
     require_user(request)
@@ -1204,6 +1347,22 @@ async def test_behringer(request: Request) -> dict:
     if not result.get("connected"):
         raise HTTPException(502, "No OSC response was received. Check the console address, network, and port.")
     return {"connected": True, "message": f"Connected to {str(settings.get('model') or 'X32').upper()} at {settings.get('host')}", "items": result.get("strips")}
+
+
+@app.get("/api/integrations/behringer/catalog")
+async def behringer_catalog(request: Request) -> dict:
+    require_role(request, "admin", "editor")
+    settings = store_from(request).load()["settings"].get("behringer", {})
+    client = request.app.state.runtime.behringer_client(settings)
+    if not client.configured:
+        raise HTTPException(400, "Enable the Behringer module and save the console address first")
+    try:
+        result = await client.catalog()
+    except Exception as exc:
+        raise HTTPException(502, f"Could not read channel and bus names from the mixer: {exc}") from exc
+    if not result.get("connected"):
+        raise HTTPException(502, "No channel or bus names were received from the console")
+    return result
 
 
 @app.post("/api/integrations/osm/measurement", status_code=202)

@@ -42,7 +42,7 @@ async function sendMixerControl(element,values){if(document.body.classList.conta
 document.addEventListener("pointerdown",event=>{const fader=event.target.closest("[data-mixer-fader]");if(fader)mixerDragging.add(String(fader.closest(".widget")?.dataset.widget||""))});
 document.addEventListener("pointerup",event=>{const fader=event.target.closest("[data-mixer-fader]");if(!fader)return;const widgetId=String(fader.closest(".widget")?.dataset.widget||"");mixerDragging.delete(widgetId);widgetRenderKeys.delete(widgetId)});
 document.addEventListener("input",event=>{const fader=event.target.closest("[data-mixer-fader]");if(!fader)return;const db=x32FaderToDb(fader.value),output=fader.closest("[data-mixer-strip]")?.querySelector("[data-mixer-db]");if(output)output.textContent=`${mixerDbLabel(db)} dB`;const key=`${fader.closest(".widget")?.dataset.widget}:${fader.dataset.mixerFader}`;clearTimeout(mixerSendTimers.get(key));mixerSendTimers.set(key,setTimeout(()=>sendMixerControl(fader,{level_db:Number.isFinite(db)?db:-100}),65))});
-document.addEventListener("change",event=>{const fader=event.target.closest("[data-mixer-fader]");if(fader)sendMixerControl(fader,{level_db:Number.isFinite(x32FaderToDb(fader.value))?x32FaderToDb(fader.value):-100})});
+document.addEventListener("change",event=>{const fader=event.target.closest("[data-mixer-fader]");if(!fader)return;const bottom=Number(fader.value)<=.035;if(bottom)fader.value=0;const db=bottom?-Infinity:x32FaderToDb(fader.value),output=fader.closest("[data-mixer-strip]")?.querySelector("[data-mixer-db]");if(output)output.textContent=`${mixerDbLabel(db)} dB`;sendMixerControl(fader,{level_db:Number.isFinite(db)?db:-100})});
 document.addEventListener("click",event=>{const button=event.target.closest("[data-mixer-mute]");if(!button)return;const muted=!button.classList.contains("active");button.classList.toggle("active",muted);button.setAttribute("aria-pressed",String(muted));button.closest("[data-mixer-strip]")?.classList.toggle("muted",muted);sendMixerControl(button,{muted})});
 async function loadLightingButtons(widget,force=false){const root=widget?.querySelector("[data-lighting-buttons]");if(!root||(!force&&root.dataset.loaded==="true"))return;try{const result=await api("/api/integrations/lighting/buttons");root.dataset.loaded="true";root.innerHTML=(result.items||[]).map(item=>`<button type="button" data-lighting-button="${escapeHtml(item.name)}" class="${item.pressed?"active":""}" style="--cue-color:${safeCssColor(item.color)}"><strong>${escapeHtml(item.name)}</strong><span>${escapeHtml(item.page)}</span></button>`).join("")||'<div class="empty">No lighting buttons are exposed</div>'}catch(error){root.innerHTML=`<div class="empty">${escapeHtml(error.message)}</div>`}}
 const keyboardStorageKey=widgetId=>`churchboard:${slug}:propresenter-keyboard:${widgetId}`;
@@ -147,7 +147,7 @@ function widgetStateKey(widget,state){
   if(widget.type==="pp_macros")return`pp-macros:${JSON.stringify([pp.macros||[],settings])}`;
   if(widget.type==="notes")return`notes:${String(pp.current?.notes||"")}`;
   if(widget.type==="sermon_notes")return`sermon-notes:${objectId(timing.service_items||service.items)}:${JSON.stringify(settings)}`;
-  if(widget.type==="order")return`order:${objectId(timing.service_items||service.items)}:${objectId(state.people)}:${JSON.stringify(leaderMicKey(state.mics))}:${String(timing.current_item?.id||"")}:${timing.service_time_id||""}:${settings.show_leader!==false}:${settings.show_mic!==false}`;
+  if(widget.type==="order")return`order:${objectId(timing.service_items||service.items)}:${objectId(state.people)}:${JSON.stringify(leaderMicKey(state.mics))}:${String(timing.current_item?.id||"")}:${timing.service_time_id||""}:${settings.show_leader!==false}:${settings.show_mic!==false}:${!!settings.show_production_note}:${JSON.stringify(settings.production_note_fields||[settings.production_note_field||""])}:${JSON.stringify(settings.production_note_colors||{})}`;
   if(widget.type==="people"||widget.type==="person")return`${widget.type}:${objectId(state.people)}`;
   if(widget.type==="controls")return`controls:${JSON.stringify([state.planning_center_live||{},state.service_control||{},timing.current_item?.id,timing.current_item?.title])}`;
   if(widget.type==="restream")return`restream:${JSON.stringify(state.restream||{})}`;
@@ -163,9 +163,13 @@ function updatePlaylistLiveState(root=document){const pp=lastState.propresenter|
 function fitOrderService(root=document){
   root.querySelectorAll(".order-list").forEach(list=>{
     if(list.classList.contains("full-service-order-list"))return;
-    if(list.classList.contains("full-service-order-fit-list")||list.classList.contains("current-service-order-list")){let low=.1,high=2.5,best=.1;for(let pass=0;pass<9;pass++){const scale=(low+high)/2;list.style.setProperty("--order-fit-scale",scale);if(list.scrollHeight<=list.clientHeight+1&&list.scrollWidth<=list.clientWidth+1){best=scale;low=scale}else high=scale}list.style.setProperty("--order-fit-scale",best);return}
     const rows=[...list.querySelectorAll("li")];if(!rows.length)return;
-    rows.forEach(row=>row.classList.remove("order-hidden"));
+    rows.forEach(row=>row.classList.remove("order-hidden"));list.classList.remove("priority-window");
+    if(list.classList.contains("full-service-order-fit-list")||list.classList.contains("current-service-order-list")){
+      const minimum=list.classList.contains("full-service-order-fit-list")?1:.72;list.style.setProperty("--order-fit-scale",minimum);
+      if(list.scrollHeight<=list.clientHeight+1&&list.scrollWidth<=list.clientWidth+1){let low=minimum,high=1.35,best=minimum;for(let pass=0;pass<9;pass++){const scale=(low+high)/2;list.style.setProperty("--order-fit-scale",scale);if(list.scrollHeight<=list.clientHeight+1&&list.scrollWidth<=list.clientWidth+1){best=scale;low=scale}else high=scale}list.style.setProperty("--order-fit-scale",best);return}
+      list.classList.add("priority-window");
+    }
     const foundActive=rows.findIndex(row=>row.classList.contains("active")),activeIndex=foundActive>=0?foundActive:0,heights=rows.map(row=>Math.ceil(row.getBoundingClientRect().height)),available=Math.max(0,list.clientHeight-2),priority=[];
     priority.push(activeIndex);
     let upcomingItems=0;

@@ -17,9 +17,12 @@ function boardLetters(value) {
 
 async function loadDesktop() {
   try {
-    const [appResponse, boardsResponse] = await Promise.all([fetch("/api/app-info"), fetch("/api/dashboards")]);
+    const [appResponse, boardsResponse, modulesResponse] = await Promise.all([fetch("/api/app-info"), fetch("/api/dashboards"), fetch("/api/modules/frontend")]);
     const info = await appResponse.json();
     const data = await boardsResponse.json();
+    const modules = await modulesResponse.json();
+    const producerInstalled=(modules.modules||[]).some(module=>module.id==="producer"&&module.installed);
+    document.querySelectorAll("[data-producer-module-link]").forEach(element=>element.hidden=!producerInstalled);
     version.textContent = info.version;
     boards.innerHTML = data.items.map(board => `
       <a class="desktop-board" href="/display/${encodeURIComponent(board.slug)}">

@@ -439,9 +439,14 @@ class PlanningCenterCatalogTests(unittest.IsolatedAsyncioTestCase):
                             "person": {"data": {"type": "Person", "id": "person-1"}},
                             "team": {"data": {"type": "Team", "id": "team-1"}},
                         },
+                    }, {
+                        "type": "PlanPerson", "id": "plan-person-2",
+                        "attributes": {"name": "Morgan Reed", "team_position_name": "Vox 2", "status": "C"},
+                        "relationships": {"person": {"data": {"type": "Person", "id": "person-2"}}, "team": {"data": {"type": "Team", "id": "team-1"}}},
                     }],
                     "included": [
                         {"type": "Person", "id": "person-1", "attributes": {"photo_url": "https://example.test/jordan.jpg"}},
+                        {"type": "Person", "id": "person-2", "attributes": {"photo_url": "https://example.test/morgan.jpg"}},
                         {"type": "Team", "id": "team-1", "attributes": {"name": "Band"}},
                     ],
                 }
@@ -453,7 +458,7 @@ class PlanningCenterCatalogTests(unittest.IsolatedAsyncioTestCase):
                     "id": "item-1",
                     "attributes": {"title": "Song One", "item_type": "song", "length": 240, "sequence": 1},
                     "relationships": {
-                        "item_assignments": {"data": [{"type": "ItemAssignment", "id": "assignment-1"}]},
+                        "item_assignments": {"data": [{"type": "ItemAssignment", "id": "assignment-1"}, {"type": "ItemAssignment", "id": "assignment-2"}]},
                         "item_notes": {"data": [{"type": "ItemNote", "id": "note-1"}]},
                         "item_times": {"data": []},
                     },
@@ -462,14 +467,17 @@ class PlanningCenterCatalogTests(unittest.IsolatedAsyncioTestCase):
                     "type": "ItemAssignment",
                     "id": "assignment-1",
                     "relationships": {"assignable": {"data": {"type": "Person", "id": "person-1"}}},
+                }, {
+                    "type": "ItemAssignment", "id": "assignment-2",
+                    "relationships": {"assignable": {"data": {"type": "Person", "id": "person-2"}}},
                 }, {"type": "ItemNote", "id": "note-1", "attributes": {"category_name": "Vocals", "content": "Testing"}}],
             }
 
         client._get = fake_get
         detail = await client.plan_detail({"id": "plan-1", "service_type_id": "type-1"})
         self.assertEqual(detail["people"][0]["person_id"], "person-1")
-        self.assertEqual(detail["items"][0]["leader"], "Jordan Lee")
-        self.assertEqual(detail["items"][0]["leader_person_ids"], ["person-1"])
+        self.assertEqual(detail["items"][0]["leader"], "Jordan Lee, Morgan Reed")
+        self.assertEqual(detail["items"][0]["leader_person_ids"], ["person-1", "person-2"])
         self.assertEqual(detail["items"][0]["note_fields"], [{"name": "Vocals", "content": "Testing"}])
 
     async def test_media_by_title_returns_the_planning_center_image(self):

@@ -1672,6 +1672,21 @@ async def propresenter_thumbnail(presentation_uuid: str, index: int, request: Re
     return Response(content=content, media_type=media_type, headers={"Cache-Control": "private, max-age=15, stale-while-revalidate=30"})
 
 
+@app.get("/api/integrations/propresenter/playlist-thumbnail/{playlist_uuid}/{item_index}/{cue_index}")
+async def propresenter_playlist_thumbnail(playlist_uuid: str, item_index: int, cue_index: int, request: Request) -> Response:
+    settings = store_from(request).load()["settings"].get("propresenter", {})
+    client = ProPresenterClient(settings)
+    if not client.configured:
+        raise HTTPException(400, "ProPresenter is not connected")
+    try:
+        content, media_type = await client.playlist_thumbnail(playlist_uuid, item_index, cue_index)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(502, f"Could not load the ProPresenter playlist slide image: {exc}") from exc
+    return Response(content=content, media_type=media_type, headers={"Cache-Control": "private, max-age=15, stale-while-revalidate=30"})
+
+
 def require_propresenter_widget_control(request: Request, dashboard_slug: str | None, widget_id: str | None) -> dict:
     data = store_from(request).load()
     dashboard = next(

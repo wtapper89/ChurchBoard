@@ -49,8 +49,8 @@ const partBug = (slide,label) => { const color=safeCssColor(slide.color),kind=la
 const slidePreview = (slide,label,{notes=false,mode="image",showLabel=true}={}) => {
   const image=mode==="image"&&slide.image_url?`<img class="slide-image" src="${escapeHtml(slide.image_url)}" alt="${label} slide preview">`:"";
   const timer=mode==="image"&&slide.timer_text?`<div class="slide-live-timer" data-fit-widget-text>${escapeHtml(slide.timer_text)}</div>`:"";
-  const media=slide.media||{},video=mode==="image"&&media.is_playing&&!media.audio_only,position=Math.max(0,Number(media.position)||0),duration=Math.max(0,Number(media.duration)||0),progress=duration?Math.min(100,position/duration*100):0;
-  const videoStatus=video?`<div class="slide-video-status"><div><strong>VIDEO · PLAYING</strong><span>${duration?`${formatMediaTime(position)} / ${formatMediaTime(duration)}`:"Live playback"}</span></div>${duration?`<div class="slide-video-track"><i style="width:${progress}%"></i></div>`:""}</div>`:"";
+  const media=slide.media||{},video=mode==="image"&&media.is_playing&&media.is_foreground&&!media.audio_only,position=Math.max(0,Number(media.position)||0),duration=Math.max(0,Number(media.duration)||0),progress=duration?Math.min(100,position/duration*100):0,remaining=String(media.remaining_text||"");
+  const videoStatus=video?`<div class="slide-video-status"><div><strong>FOREGROUND VIDEO</strong><span>${remaining?`${escapeHtml(remaining)} remaining`:duration?`${formatMediaTime(Math.max(0,duration-position))} remaining`:"Playing"}</span></div>${duration?`<div class="slide-video-track"><i style="width:${progress}%"></i></div>`:""}</div>`:"";
   const displayText=mode==="text"&&slide.timer_text?replaceSlideTimer(slide.text,slide.timer_text):(slide.text||"No active slide");
   return `<div class="slide ${label==="Now"?"current":""} mode-${mode}">${showLabel?`<div class="slide-label">${label}</div>`:""}<div class="slide-canvas ${video?"has-video":""}"><div class="slide-text" data-fit-slide>${escapeHtml(displayText)}</div>${image}${timer}${videoStatus}</div>${notes&&slide.notes?`<div class="slide-notes">${escapeHtml(slide.notes)}</div>`:""}</div>`;
 };

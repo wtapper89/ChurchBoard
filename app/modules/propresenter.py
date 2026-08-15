@@ -241,17 +241,49 @@ class ProPresenterClient:
             playlist_context["service_item_index"] = linked_playlist_row["index"]
             playlist_context["service_item_index_is_absolute"] = True
             playlist_context["service_item_is_pco"] = True
+            arrangement_uuid = str(linked_playlist_row.get("arrangement_uuid") or "")
+            arrangement_name = str(linked_playlist_row.get("arrangement_name") or "")
+            if arrangement_uuid or arrangement_name:
+                # Planning Center-synced rows carry the exact arrangement that
+                # ProPresenter is playing. /presentation/active can leave
+                # current_arrangement blank, which previously made us expand
+                # the first library arrangement and display duplicated or
+                # out-of-order media cues.
+                presentation["current_arrangement"] = {
+                    "uuid": arrangement_uuid,
+                    "name": arrangement_name,
+                }
+                cue_entries = self._presentation_cue_entries(presentation)
+                cue_total = self._cue_total(index_payload, len(cue_entries))
+                current_position, next_position = self._cue_positions(cue_entries, current, next_slide, index)
+                current_entry = cue_entries[current_position] if 0 <= current_position < len(cue_entries) else {}
+                next_entry = cue_entries[next_position] if 0 <= next_position < len(cue_entries) else {}
+                current_thumbnail_position = int(current_entry.get("_thumbnail_index", current_position))
+                next_thumbnail_position = int(next_entry.get("_thumbnail_index", next_position))
+                current_details = current_entry.get("cue", {})
+                next_details = next_entry.get("cue", {})
+                current_result["notes"] = current_result["notes"] or self._notes(current_details)
+                next_result["notes"] = next_result["notes"] or self._notes(next_details)
+        active_thumbnail_playlist_uuid = str(
+            active_playlist_context.get("playlist_uuid")
+            or playlist_context.get("active_playlist_uuid")
+            or browser_playlist_context.get("playlist_uuid")
+            or ""
+        )
+        active_thumbnail_item_index = int(linked_playlist_row.get("index")) if linked_playlist_row else playlist_context.get("service_item_index")
         if clock - self._transport_refreshed >= 0.5:
             transport_responses = await asyncio.gather(
                 self._http().get(f"{base}/v1/transport/presentation/current"),
                 self._http().get(f"{base}/v1/transport/presentation/time"),
                 self._http().get(f"{base}/v1/timers/current"),
+                self._http().get(f"{base}/v1/timer/video_countdown"),
                 return_exceptions=True,
             )
             self._transport_refreshed = clock
             self._transport_payload = {
                 **self._transport_status(*transport_responses[:2]),
                 "timers": self._timer_status(transport_responses[2]),
+                "video_remaining": self._video_countdown(transport_responses[3]),
             }
         media = self._transport_payload.get("media") or {}
         current_timer = self._timer_for_slide(
@@ -260,16 +292,25 @@ class ProPresenterClient:
             self._presentation_title(presentation),
             current_details,
         )
-        # Presentation-layer transport also reports looping motion backgrounds.
-        # Treat it as foreground video only when the cue has no lyric text, or
-        # when the cue is a real timer slide.
-        visible_media = media if current_timer or not str(current_result.get("text") or "").strip() else {}
+        # Presentation transport includes looping slide backgrounds. The
+        # dedicated video countdown is the reliable indication that a finite
+        # foreground video is playing; it prevents motion backgrounds from
+        # appearing as foreground videos on every lyric cue.
+        video_remaining = self._transport_payload.get("video_remaining") or ""
+        visible_media = (
+            {**media, "remaining_text": video_remaining, "is_foreground": True}
+            if video_remaining
+            and media.get("is_playing")
+            and not str(current_result.get("text") or "").strip()
+            else {}
+        )
         current_result.update({
             "part": current_entry.get("part", ""),
             "color": current_entry.get("color", ""),
             "index": index + 1,
             "total": cue_total,
-            "image_url": self._thumbnail_url(presentation_uuid, current_thumbnail_position, current_result["image_uuid"])
+            "image_url": self._playlist_thumbnail_url(active_thumbnail_playlist_uuid, active_thumbnail_item_index, current_position, current_result["image_uuid"])
+            or self._thumbnail_url(presentation_uuid, current_thumbnail_position, current_result["image_uuid"])
             if current_result["image_uuid"] or current_details else "",
             "timer_text": current_timer,
             "media": visible_media,
@@ -279,7 +320,8 @@ class ProPresenterClient:
             "color": next_entry.get("color", ""),
             "index": index + 2 if index + 1 < cue_total else 0,
             "total": cue_total,
-            "image_url": self._thumbnail_url(presentation_uuid, next_thumbnail_position, next_result["image_uuid"])
+            "image_url": self._playlist_thumbnail_url(active_thumbnail_playlist_uuid, active_thumbnail_item_index, next_position, next_result["image_uuid"])
+            or self._thumbnail_url(presentation_uuid, next_thumbnail_position, next_result["image_uuid"])
             if next_result["image_uuid"] or next_details else "",
             "timer_text": self._countdown_text(next_result.get("text")),
         })
@@ -290,6 +332,14 @@ class ProPresenterClient:
                 and int(item.get("index", -1)) == int(playlist_context.get("service_item_index"))
             )
             item_details = presentation if active_row else self._playlist_presentation_details.get(item_uuid) or item.get("_presentation_payload") or {}
+            if item_details and (item.get("arrangement_uuid") or item.get("arrangement_name")):
+                item_details = {
+                    **item_details,
+                    "current_arrangement": {
+                        "uuid": str(item.get("arrangement_uuid") or ""),
+                        "name": str(item.get("arrangement_name") or ""),
+                    },
+                }
             thumbnail_uuid = presentation_uuid if active_row and presentation_uuid else item_uuid
             if active_row and presentation_uuid:
                 item["presentation_uuid"] = presentation_uuid
@@ -303,9 +353,9 @@ class ProPresenterClient:
                     "part": entry.get("part", ""),
                     "color": entry.get("color", ""),
                     "image_url": self._thumbnail_url(
-                        thumbnail_uuid,
-                        int(entry.get("_thumbnail_index", position)),
-                        self._slide(entry.get("cue")).get("image_uuid", ""),
+                        thumbnail_uuid, int(entry.get("_thumbnail_index", position)), self._slide(entry.get("cue")).get("image_uuid", ""),
+                    ) if not browser_playlist_context.get("playlist_uuid") else self._playlist_thumbnail_url(
+                        str(browser_playlist_context.get("playlist_uuid") or ""), int(item.get("index", -1)), position, self._slide(entry.get("cue")).get("image_uuid", ""),
                     ),
                     "active": active_row and position == current_position,
                 }
@@ -320,7 +370,7 @@ class ProPresenterClient:
             "next": next_result,
             "timers": self._transport_payload.get("timers") or [],
             "slides": [
-                {"index": position + 1, "text": self._slide(entry.get("cue")).get("text", ""), "notes": self._notes(entry.get("cue")), "part": entry.get("part", ""), "color": entry.get("color", ""), "image_url": self._thumbnail_url(presentation_uuid, int(entry.get("_thumbnail_index", position)), self._slide(entry.get("cue")).get("image_uuid", "")), "active": position == current_position}
+                {"index": position + 1, "text": self._slide(entry.get("cue")).get("text", ""), "notes": self._notes(entry.get("cue")), "part": entry.get("part", ""), "color": entry.get("color", ""), "image_url": self._playlist_thumbnail_url(active_thumbnail_playlist_uuid, active_thumbnail_item_index, position, self._slide(entry.get("cue")).get("image_uuid", "")) or self._thumbnail_url(presentation_uuid, int(entry.get("_thumbnail_index", position)), self._slide(entry.get("cue")).get("image_uuid", "")), "active": position == current_position}
                 for position, entry in enumerate(cue_entries)
             ],
             "playlist_presentations": playlist_presentations,
@@ -445,7 +495,7 @@ class ProPresenterClient:
                 index = int(raw_index) if raw_index is not None else position
             except (TypeError, ValueError):
                 index = position
-            results.append({"index": index, "title": title, "presentation_uuid": identifier, "active": index == context.get("service_item_index"), "is_pco": bool(row.get("is_pco")), "type": kind, "triggerable": triggerable, "_presentation_payload": presentation})
+            results.append({"index": index, "title": title, "presentation_uuid": identifier, "arrangement_uuid": str(presentation_info.get("arrangement_uuid") or ""), "arrangement_name": str(presentation_info.get("arrangement_name") or ""), "active": index == context.get("service_item_index"), "is_pco": bool(row.get("is_pco")), "type": kind, "triggerable": triggerable, "_presentation_payload": presentation})
         return results
 
     async def trigger_active_slide(self, index: int) -> None:
@@ -605,6 +655,22 @@ class ProPresenterClient:
         return timers
 
     @classmethod
+    def _video_countdown(cls, response: Any) -> str:
+        if isinstance(response, Exception) or not getattr(response, "is_success", False):
+            return ""
+        try:
+            raw = response.json()
+        except Exception:
+            return ""
+        if isinstance(raw, dict):
+            raw = raw.get("time") or raw.get("value") or raw.get("video_countdown") or ""
+        countdown = cls._countdown_text(raw)
+        if not countdown:
+            return ""
+        values = [int(value) for value in re.findall(r"\d+", countdown)]
+        return countdown if any(values) else ""
+
+    @classmethod
     def _timer_for_slide(cls, timers: list[dict[str, str]], text: Any, title: str, cue: Any) -> str:
         # ProPresenter returns the timer element's design-time placeholder (for
         # example 754:56) as slide text. Only replace that placeholder when an
@@ -711,29 +777,25 @@ class ProPresenterClient:
             return cls._cue_entries(raw)
 
         group_entries: dict[str, list[dict[str, Any]]] = {}
-        thumbnail_offset = 0
         for group in groups:
             group_id = identifier(group)
             if not isinstance(group, dict) or not group_id:
                 continue
-            source_entries = cls._cue_entries(group)
-            group_entries[group_id] = [
-                {**entry, "_thumbnail_index": thumbnail_offset + position}
-                for position, entry in enumerate(source_entries)
-            ]
-            thumbnail_offset += len(source_entries)
+            group_entries[group_id] = cls._cue_entries(group)
         sequence_ids = [identifier(value) for value in sequence]
         sequence_ids = [value for value in sequence_ids if value in group_entries]
         if not sequence_ids:
             return cls._cue_entries(raw)
 
         entries: list[dict[str, Any]] = []
-        # ProPresenter expands repeated arrangement groups in its live cue
-        # order, but its thumbnail endpoint continues to address the original
-        # library cue. Preserve the expanded order while retaining each cue's
-        # source thumbnail index so repeated groups do not become 404s.
+        # ProPresenter's thumbnail endpoint follows the expanded arrangement,
+        # not the source cue's position in the presentation library. Reusing a
+        # source index for a repeated group can therefore show an unrelated
+        # media cue (often the song's opening video background) many times.
         for group_id in sequence_ids:
             entries.extend(dict(entry) for entry in group_entries[group_id])
+        for position, entry in enumerate(entries):
+            entry["_thumbnail_index"] = position
         return entries
 
     @classmethod
@@ -874,6 +936,19 @@ class ProPresenterClient:
             url += f"?revision={quote(revision, safe='')}"
         return url
 
+    @staticmethod
+    def _playlist_thumbnail_url(playlist_uuid: str, item_index: Any, cue_index: int, revision: str = "") -> str:
+        try:
+            item_index = int(item_index)
+        except (TypeError, ValueError):
+            return ""
+        if not playlist_uuid or item_index < 0 or cue_index < 0 or not re.fullmatch(r"[A-Za-z0-9-]+", playlist_uuid):
+            return ""
+        url = f"/api/integrations/propresenter/playlist-thumbnail/{quote(playlist_uuid, safe='')}/{item_index}/{cue_index}"
+        if revision and re.fullmatch(r"[A-Za-z0-9-]+", revision):
+            url += f"?revision={quote(revision, safe='')}"
+        return url
+
     async def thumbnail(self, presentation_uuid: str, index: int) -> tuple[bytes, str]:
         if not re.fullmatch(r"[A-Za-z0-9-]+", presentation_uuid) or index < 0:
             raise ValueError("Invalid ProPresenter presentation or slide index")
@@ -883,6 +958,19 @@ class ProPresenterClient:
             # while ProPresenter's thumbnail route uses one-based cue numbers.
             response = await client.get(
                 f"{base}/v1/presentation/{quote(presentation_uuid, safe='')}/thumbnail/{index + 1}",
+                params={"quality": 960, "thumbnail_type": "jpeg"},
+                headers={"Accept": "image/jpeg"},
+            )
+            response.raise_for_status()
+        return response.content, response.headers.get("content-type", "image/jpeg")
+
+    async def playlist_thumbnail(self, playlist_uuid: str, item_index: int, cue_index: int) -> tuple[bytes, str]:
+        if not re.fullmatch(r"[A-Za-z0-9-]+", playlist_uuid) or item_index < 0 or cue_index < 0:
+            raise ValueError("Invalid ProPresenter playlist item or slide index")
+        base = f"http://{self.settings.get('host', '127.0.0.1')}:{int(self.settings.get('port', 50001))}"
+        async with httpx.AsyncClient(timeout=5) as client:
+            response = await client.get(
+                f"{base}/v1/playlist/{quote(playlist_uuid, safe='')}/{item_index}/thumbnail/{cue_index}",
                 params={"quality": 960, "thumbnail_type": "jpeg"},
                 headers={"Accept": "image/jpeg"},
             )

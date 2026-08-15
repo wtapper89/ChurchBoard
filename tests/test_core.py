@@ -1338,10 +1338,41 @@ class ProPresenterTests(unittest.TestCase):
         }
         entries = ProPresenterClient._presentation_cue_entries(presentation)
         self.assertEqual([entry["part"] for entry in entries], ["Verse 2", "Verse 2", "Chorus 1", "Bridge", "Chorus 1"])
-        self.assertEqual([entry["_thumbnail_index"] for entry in entries], [2, 3, 1, 4, 1])
+        self.assertEqual([entry["_thumbnail_index"] for entry in entries], [0, 1, 2, 3, 4])
         current, next_position = ProPresenterClient._cue_positions(entries, {"text": "Verse last"}, {"text": "Chorus line"}, 1)
         self.assertEqual((current, next_position), (1, 2))
         self.assertEqual(ProPresenterClient._cue_total({"presentation_index": {"total_cues": 5}}, len(entries)), 5)
+
+    def test_playlist_row_preserves_planning_center_arrangement(self):
+        rows = ProPresenterClient._playlist_presentations({"items": [{
+            "index": 4,
+            "type": "presentation",
+            "is_pco": True,
+            "presentation_info": {
+                "presentation_uuid": "PRESENTATION-1",
+                "arrangement_uuid": "ARRANGEMENT-2",
+                "arrangement_name": "Planning Center sequence",
+            },
+            "presentation": {"id": {"uuid": "PRESENTATION-1", "name": "Lord I Lift Your Name On High"}},
+        }]}, {})
+        self.assertEqual(rows[0]["arrangement_uuid"], "ARRANGEMENT-2")
+        self.assertEqual(rows[0]["arrangement_name"], "Planning Center sequence")
+
+    def test_explicit_arrangement_avoids_first_arrangement_media_duplicates(self):
+        presentation = {
+            "current_arrangement": {"uuid": "pco"},
+            "groups": [
+                {"uuid": "video", "slides": [{"label": "Background.mp4", "text": ""}]},
+                {"uuid": "verse", "name": "Verse", "slides": [{"text": "Lord I lift Your name on high"}]},
+                {"uuid": "chorus", "name": "Chorus", "slides": [{"text": "You came from heaven to earth"}]},
+            ],
+            "arrangements": [
+                {"id": {"uuid": "old", "index": 0}, "groups": ["video", "verse", "video", "chorus"]},
+                {"id": {"uuid": "pco", "index": 1}, "groups": ["video", "verse", "chorus"]},
+            ],
+        }
+        entries = ProPresenterClient._presentation_cue_entries(presentation)
+        self.assertEqual([entry["part"] for entry in entries], ["", "Verse", "Chorus"])
 
     def test_nested_live_presentation_index_is_read(self):
         payload = {"presentation_index": {"index": 4, "presentation_id": {"uuid": "ABC-123"}}}
@@ -1354,6 +1385,10 @@ class ProPresenterTests(unittest.TestCase):
         self.assertEqual(
             ProPresenterClient._thumbnail_url(uuid, 3, "SLIDE-456"),
             "/api/integrations/propresenter/thumbnail/ABC-123/3?revision=SLIDE-456",
+        )
+        self.assertEqual(
+            ProPresenterClient._playlist_thumbnail_url("PLAYLIST-1", 4, 12, "SLIDE-456"),
+            "/api/integrations/propresenter/playlist-thumbnail/PLAYLIST-1/4/12?revision=SLIDE-456",
         )
 
     def test_presentation_title_and_hex_color_support_nested_ids(self):
@@ -1382,6 +1417,19 @@ class ProPresenterTests(unittest.TestCase):
         )
         self.assertEqual(status["media"]["position"], 42.5)
         self.assertEqual(status["media"]["duration"], 300)
+
+    def test_video_countdown_only_reports_nonzero_foreground_time(self):
+        class Response:
+            is_success = True
+
+            def __init__(self, value):
+                self.value = value
+
+            def json(self):
+                return self.value
+
+        self.assertEqual(ProPresenterClient._video_countdown(Response("00:01:42")), "00:01:42")
+        self.assertEqual(ProPresenterClient._video_countdown(Response("00:00")), "")
 
     def test_timer_element_uses_running_propresenter_timer(self):
         timers = [
@@ -1484,6 +1532,36 @@ class ProPresenterPollingTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(content, b"jpeg")
         self.assertEqual(media_type, "image/jpeg")
         self.assertTrue(fake.url.endswith("/v1/presentation/ABC-123/thumbnail/4"))
+
+    async def test_playlist_thumbnail_route_keeps_expanded_cue_zero_based(self):
+        class FakeResponse:
+            content = b"jpeg"
+            headers = {"content-type": "image/jpeg"}
+
+            def raise_for_status(self):
+                return None
+
+        class FakeHttp:
+            def __init__(self):
+                self.url = ""
+
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *_args):
+                return None
+
+            async def get(self, url, **_kwargs):
+                self.url = url
+                return FakeResponse()
+
+        fake = FakeHttp()
+        client = ProPresenterClient({"enabled": True, "host": "127.0.0.1", "port": 50001})
+        with patch("app.modules.propresenter.httpx.AsyncClient", return_value=fake):
+            content, media_type = await client.playlist_thumbnail("PLAYLIST-1", 4, 12)
+        self.assertEqual(content, b"jpeg")
+        self.assertEqual(media_type, "image/jpeg")
+        self.assertTrue(fake.url.endswith("/v1/playlist/PLAYLIST-1/4/thumbnail/12"))
 
     async def test_active_playlist_context_drives_live_match_when_focus_is_elsewhere(self):
         class FakeResponse:
@@ -1647,7 +1725,7 @@ class ProPresenterPollingTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual([item["title"] for item in presentations], ["Song One", "Song Two"])
         self.assertEqual([slide["text"] for slide in presentations[0]["slides"]], ["First song", "First chorus"])
         self.assertEqual([slide["text"] for slide in presentations[1]["slides"]], ["Second song", "Second chorus"])
-        self.assertEqual(presentations[1]["slides"][1]["image_url"], "/api/integrations/propresenter/thumbnail/PRES-2/1")
+        self.assertEqual(presentations[1]["slides"][1]["image_url"], "/api/integrations/propresenter/playlist-thumbnail/PLAYLIST-1/1/1")
 
     async def test_non_active_playlist_slide_targets_its_presentation(self):
         class FakeResponse:

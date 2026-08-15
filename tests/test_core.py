@@ -57,11 +57,15 @@ class ModuleIntegrationTests(unittest.IsolatedAsyncioTestCase):
     def test_audio_history_separates_service_times_and_items(self):
         with tempfile.TemporaryDirectory() as directory:
             reports = SPLReportStore(Path(directory) / "samples.jsonl")
-            service = {"id": "plan-1", "title": "Sunday Worship"}
-            timing = {"service_time_id": "time-2", "service_time_name": "11:00 AM"}
+            service = {"id": "plan-1", "title": "Sunday Worship", "dates": "August 9", "times": [{"id": "time-2", "starts_at": "2026-08-09T15:00:00+00:00"}]}
+            timing = {"service_time_id": "time-2", "service_time_name": "11:00 AM", "service_start_at": "2026-08-09T15:00:00+00:00"}
             reports.record({"fast_db": 78.0}, service, {"id": "song-1", "title": "Song"}, "fast_db", "A-weighted Fast", timing=timing, source="ProdMesh RTA", unit="dB SPL")
             reports.record({"fast_db": 82.0}, service, {"id": "song-1", "title": "Song"}, "fast_db", "A-weighted Fast", timing=timing, source="ProdMesh RTA", unit="dB SPL")
-            self.assertEqual(reports.services()[0]["id"], "plan-1--time-2")
+            service_row = reports.services()[0]
+            self.assertEqual(service_row["id"], "plan-1--time-2")
+            self.assertEqual(service_row["service_date"], "August 9")
+            self.assertEqual(service_row["service_start_at"], "2026-08-09T15:00:00+00:00")
+            self.assertTrue(service_row["first_sample_at"])
             report = reports.report("plan-1--time-2")
             self.assertEqual(report["items"][0]["average"], 80.0)
             self.assertEqual(report["items"][0]["source"], "ProdMesh RTA")

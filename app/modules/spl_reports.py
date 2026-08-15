@@ -37,6 +37,13 @@ class SPLReportStore:
         service_time_id = str((timing or {}).get("service_time_id") or "")
         service_id = f"{plan_id}--{service_time_id}" if service_time_id else plan_id
         service_time_name = str((timing or {}).get("service_time_name") or "")
+        service_start_at = str((timing or {}).get("service_start_at") or "")
+        if not service_start_at and service_time_id:
+            matching_time = next(
+                (row for row in (service.get("times") or []) if str(row.get("id") or "") == service_time_id),
+                {},
+            )
+            service_start_at = str(matching_time.get("starts_at") or "")
         service_title = str(service.get("title") or service.get("service_type_name") or "Unassigned service")
         if service_time_name:
             service_title = f"{service_title} · {service_time_name}"
@@ -46,6 +53,8 @@ class SPLReportStore:
             "plan_id": plan_id,
             "service_time_id": service_time_id,
             "service_time_name": service_time_name,
+            "service_date": str(service.get("dates") or ""),
+            "service_start_at": service_start_at,
             "service_title": service_title,
             "item_id": str((item or {}).get("id") or "unassigned"),
             "item_title": str((item or {}).get("title") or "Unassigned"),
@@ -78,11 +87,23 @@ class SPLReportStore:
                 event = json.loads(line)
             except json.JSONDecodeError:
                 continue
-            grouped[str(event.get("service_id"))] = {
-                "id": str(event.get("service_id")), "plan_id": str(event.get("plan_id") or event.get("service_id")),
+            service_id = str(event.get("service_id"))
+            timestamp = str(event.get("timestamp") or "")
+            entry = grouped.setdefault(service_id, {
+                "id": service_id, "plan_id": str(event.get("plan_id") or service_id),
                 "service_time_id": str(event.get("service_time_id") or ""), "title": event.get("service_title"),
-                "last_sample_at": event.get("timestamp"), "source": event.get("source") or "Open Sound Meter",
-            }
+                "service_date": str(event.get("service_date") or ""),
+                "service_start_at": str(event.get("service_start_at") or ""),
+                "first_sample_at": timestamp, "last_sample_at": timestamp,
+                "source": event.get("source") or "Open Sound Meter",
+            })
+            entry["title"] = event.get("service_title") or entry.get("title")
+            entry["service_date"] = str(event.get("service_date") or entry.get("service_date") or "")
+            entry["service_start_at"] = str(event.get("service_start_at") or entry.get("service_start_at") or "")
+            if timestamp and (not entry.get("first_sample_at") or timestamp < str(entry["first_sample_at"])):
+                entry["first_sample_at"] = timestamp
+            if timestamp and (not entry.get("last_sample_at") or timestamp > str(entry["last_sample_at"])):
+                entry["last_sample_at"] = timestamp
         return sorted(grouped.values(), key=lambda entry: str(entry["last_sample_at"]), reverse=True)
 
     def report(self, service_id: str) -> dict[str, Any]:

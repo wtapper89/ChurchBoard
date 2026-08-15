@@ -332,6 +332,7 @@ class ApiTests(unittest.TestCase):
         self.assertEqual(playlist["settings"]["active_border_color"], "#f5c400")
         editor = self.client.get("/static/editor.js").text
         self.assertIn("playlist_density", editor)
+        self.assertIn('value="maximum"', editor)
         self.assertIn("playlist_auto_scroll", editor)
         self.assertIn("playlist_active_border_color", editor)
         self.assertIn("keyboard_control_default", editor)

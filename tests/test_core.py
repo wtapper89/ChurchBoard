@@ -712,6 +712,33 @@ class RuntimeAssignmentTests(unittest.TestCase):
         self.assertEqual(assignment["position_key"], "band::vox 1")
         self.assertEqual(assignment["team_id"], "band")
 
+    def test_mics_can_render_without_planning_center_positions(self):
+        state = {
+            "people": [{"name": "Scheduled Person", "position_key": "band::vox 1"}],
+            "mics": [{"id": "blue", "name": "Blue", "default_photo": "data:image/png;base64,photo"}],
+        }
+        RuntimeService._apply_assignments(state, {"band::vox 1": "blue"}, False)
+        assignment = state["mics"][0]["assignment"]
+        self.assertEqual(assignment["name"], "Blue")
+        self.assertEqual(assignment["photo"], "data:image/png;base64,photo")
+        self.assertTrue(assignment["standalone_mic"])
+
+    def test_planning_center_photo_overrides_mic_default_photo(self):
+        state = {
+            "people": [{"name": "Jordan Lee", "photo": "planning-center.jpg", "position_key": "band::vox 1"}],
+            "mics": [{"id": "blue", "name": "Blue", "default_photo": "fallback.jpg"}],
+        }
+        RuntimeService._apply_assignments(state, {"band::vox 1": "blue"})
+        self.assertEqual(state["mics"][0]["assignment"]["photo"], "planning-center.jpg")
+
+    def test_mic_default_photo_fills_missing_planning_center_photo(self):
+        state = {
+            "people": [{"name": "Jordan Lee", "photo": "", "position_key": "band::vox 1"}],
+            "mics": [{"id": "blue", "name": "Blue", "default_photo": "fallback.jpg"}],
+        }
+        RuntimeService._apply_assignments(state, {"band::vox 1": "blue"})
+        self.assertEqual(state["mics"][0]["assignment"]["photo"], "fallback.jpg")
+
     def test_demo_state_populates_propresenter_playlist_previews(self):
         propresenter = RuntimeService.demo_state()["propresenter"]
         self.assertTrue(propresenter["playlist_presentations"])

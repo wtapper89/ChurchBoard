@@ -68,6 +68,7 @@ def parse_ssc_response(response: dict[str, Any], receiver: dict[str, Any], chann
             "frequency": frequency_text,
             "model": device.get("product") or receiver.get("model") or "Sennheiser",
             "firmware": device.get("firmware") or device.get("version") or "",
+            "default_photo": str(configured_mic.get("default_photo") or ""),
             "errors": list(dict.fromkeys(warnings or ([] if transmitter_present else ["Transmitter off"]))),
         })
     return output
@@ -104,7 +105,7 @@ class SennheiserClient:
             response = await self._udp_query(str(receiver.get("host") or ""), int(receiver.get("port") or 45), ssc_request(channels))
             return parse_ssc_response(response, receiver, channels)
         except (OSError, asyncio.TimeoutError, ValueError, json.JSONDecodeError) as exc:
-            return [{"id": str(next((item.get("id") for item in configs if int(item.get("channel") or 1) == channel), f"{receiver.get('id') or receiver.get('host')}-{channel}")), "receiver": receiver.get("name") or receiver.get("host"), "channel": channel, "name": str(next((item.get("name") for item in configs if int(item.get("channel") or 1) == channel), f"Channel {channel}")), "battery_percent": 0, "rf": 0, "audio": 0, "muted": False, "online": False, "receiver_online": False, "errors": [str(exc) or "Receiver unavailable"]} for channel in channels]
+            return [{"id": str(next((item.get("id") for item in configs if int(item.get("channel") or 1) == channel), f"{receiver.get('id') or receiver.get('host')}-{channel}")), "receiver": receiver.get("name") or receiver.get("host"), "channel": channel, "name": str(next((item.get("name") for item in configs if int(item.get("channel") or 1) == channel), f"Channel {channel}")), "default_photo": str(next((item.get("default_photo") for item in configs if int(item.get("channel") or 1) == channel), "") or ""), "battery_percent": 0, "rf": 0, "audio": 0, "muted": False, "online": False, "receiver_online": False, "errors": [str(exc) or "Receiver unavailable"]} for channel in channels]
 
     async def _udp_query(self, host: str, port: int, payload: dict[str, Any]) -> dict[str, Any]:
         loop = asyncio.get_running_loop()

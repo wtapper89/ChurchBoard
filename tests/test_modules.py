@@ -26,6 +26,13 @@ class ModuleRegistryTests(unittest.TestCase):
         self.assertEqual(added, ["ndi-video"])
         self.assertEqual(self.registry.widget_owner("ndi"), "ndi-video")
 
+    def test_webcam_widget_installs_usb_camera_module(self):
+        self.registry.reconcile(self.data)
+        self.assertNotIn("webcam-video", self.data["modules"]["installed"])
+        added = self.registry.install_for_widget_types(self.data, {"webcam"})
+        self.assertEqual(added, ["webcam-video"])
+        self.assertEqual(self.registry.widget_owner("webcam"), "webcam-video")
+
     def test_behringer_fader_widget_installs_mixer_module(self):
         self.registry.reconcile(self.data)
         self.assertNotIn("behringer-mixer", self.data["modules"]["installed"])

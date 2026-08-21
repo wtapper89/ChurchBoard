@@ -68,7 +68,7 @@ BUILTIN_MODULES = [
     {
         "id": "mics", "name": "Mics", "vendor": "ChurchBoard", "version": "3.0.0",
         "description": "Shure and Sennheiser wireless receiver status, battery, RF, audio, mute, and position mapping.", "category": "Wireless audio",
-        "settings_keys": ["shure", "sennheiser"], "dependencies": [], "provides": ["churchboard.microphones/v1"], "consumes": ["churchboard.people/v1?"], "widgets": [], "pages": [],
+        "settings_keys": ["mics", "shure", "sennheiser"], "dependencies": [], "provides": ["churchboard.microphones/v1"], "consumes": ["churchboard.people/v1?"], "widgets": [], "pages": [],
         "setup": [{"title": "Use the production LAN", "text": "Connect each receiver and the ChurchBoard computer to the same trusted network."}, {"title": "Add receiver channels", "text": "Choose Shure or Sennheiser for each channel, then enter its IP, name, and optional Planning Center position."}],
         "configuration_path": "/modules#mics", "frontend": {},
     },
@@ -140,6 +140,19 @@ BUILTIN_MODULES = [
             {"title": "Enable an NDI sender", "text": "Turn on NDI output in ProPresenter or another sender on the same multicast-capable network."},
         ],
         "configuration_path": "/modules#ndi-video", "documentation": "/docs/NDI_AND_INTERCOM.md", "frontend": {"renderer": "legacy-adapter"},
+    },
+    {
+        "id": "webcam-video", "name": "USB Camera", "vendor": "ChurchBoard", "version": "1.0.1",
+        "description": "Live previews from USB/UVC cameras, capture cards, and webcam outputs such as Blackmagic Web Presenter—without NDI.", "category": "Video",
+        "dependencies": [], "provides": ["churchboard.local-camera/v1"], "consumes": [],
+        "widgets": [widget("webcam", "USB camera", "Audio & streaming", 6, 4, device_id="", device_label="", fit="contain", mirror=False)], "pages": [],
+        "setup": [
+            {"title": "Connect a USB video device", "text": "Connect a UVC camera or capture device to the computer that will display this ChurchBoard page."},
+            {"title": "Choose it in the page editor", "text": "Add the USB Camera widget, open its settings, and select Allow camera access to load the camera list."},
+            {"title": "Use HTTPS away from localhost", "text": "Browsers allow camera access on localhost or a trusted HTTPS ChurchBoard address."},
+        ],
+        "configuration_path": "/modules#webcam-video", "documentation": "/docs/USB_CAMERA.md",
+        "frontend": {"renderer": "legacy-adapter", "styles": ["/static/webcam.css"], "scripts": ["/static/webcam.js"]},
     },
     {
         "id": "producer", "name": "Producer", "vendor": "ChurchBoard", "version": "2.1.0",

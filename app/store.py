@@ -54,6 +54,7 @@ def default_data() -> dict[str, Any]:
                 },
             },
             "propresenter": {"enabled": False, "host": "127.0.0.1", "port": 50001, "refresh_seconds": 0.075, "remote_control_enabled": False},
+            "mics": {"use_planning_center_positions": True},
             "shure": {"enabled": False, "refresh_seconds": 0.5, "receivers": [], "mics": []},
             "sennheiser": {"enabled": False, "refresh_seconds": 0.5, "receivers": [], "mics": []},
             "open_sound_meter": {
@@ -116,7 +117,7 @@ class ConfigStore:
             baseline = default_data()
             baseline.update(raw)
             baseline["settings"] = {**default_data()["settings"], **raw.get("settings", {})}
-            for section in ("planning_center", "propresenter", "shure", "sennheiser", "open_sound_meter", "prodmesh_rta", "behringer", "restream", "obs", "lighting", "ndi", "intercom", "server"):
+            for section in ("planning_center", "propresenter", "mics", "shure", "sennheiser", "open_sound_meter", "prodmesh_rta", "behringer", "restream", "obs", "lighting", "ndi", "intercom", "server"):
                 baseline["settings"][section] = {
                     **default_data()["settings"][section],
                     **raw.get("settings", {}).get(section, {}),
@@ -173,6 +174,14 @@ class ConfigStore:
                         widget["settings"] = {"sources": [], **widget.get("settings", {})}
                     if widget.get("type") == "ndi":
                         widget["settings"] = {"source_name": "", **widget.get("settings", {})}
+                    if widget.get("type") == "webcam":
+                        widget["settings"] = {
+                            "device_id": "",
+                            "device_label": "",
+                            "fit": "contain",
+                            "mirror": False,
+                            **widget.get("settings", {}),
+                        }
                     if widget.get("type") == "order":
                         widget["settings"] = {"display_mode": "current", "limit": 6, "show_leader": False, "show_mic": False, "show_production_note": False, "production_note_field": "", "production_note_fields": [], "production_note_colors": {}, **widget.get("settings", {})}
                     if widget.get("type") == "spl":

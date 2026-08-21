@@ -135,6 +135,7 @@ class ShureClient:
                 "receiver": config.get("receiver_name") or receiver.get("name") or receiver_id,
                 "channel": channel,
                 "model": str(config.get("model") or receiver_model),
+                "default_photo": str(config.get("default_photo") or ""),
                 **state,
                 "name": configured_name or state["name"],
             })

@@ -82,6 +82,16 @@ class ApiTests(unittest.TestCase):
         self.assertIn('production_note_field', self.client.get("/static/editor.js").text)
         self.assertIn('method:"DELETE"', self.client.get("/static/editor.js").text)
         self.assertIn('name="assignment_grouping"', self.client.get("/static/editor.js").text)
+        self.assertIn('id="refresh-webcam-sources"', self.client.get("/static/editor.js").text)
+        webcam_script = self.client.get("/static/webcam.js")
+        self.assertEqual(webcam_script.status_code, 200)
+        self.assertIn("/api/integrations/webcam/devices", webcam_script.text)
+        self.assertIn("/api/integrations/webcam/stream/", webcam_script.text)
+        self.assertNotIn("getUserMedia", webcam_script.text)
+        self.assertIn("data-webcam-preview", common_script)
+        webcam_style = self.client.get("/static/webcam.css").text
+        self.assertIn("contain:size layout paint", webcam_style)
+        self.assertIn('data-widget-type="webcam"', webcam_style)
         self.assertIn('settings.card_grouping!=="position"', common_script)
         self.assertNotIn('talent-channel"><strong>', common_script)
         stylesheet = self.client.get("/static/style.css").text
@@ -130,6 +140,13 @@ class ApiTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         catalog = {item["id"]: item for item in self.client.get("/api/modules").json()["items"]}
         self.assertTrue(catalog["ndi-video"]["installed"])
+
+    def test_usb_camera_endpoints_are_host_based(self):
+        with patch.object(self.client.app.state.webcams, "devices", return_value=[{"id": "0", "index": 0, "label": "Web Presenter"}]):
+            response = self.client.get("/api/integrations/webcam/devices")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["items"][0]["label"], "Web Presenter")
+        self.assertEqual(self.client.get("/api/integrations/webcam/stream/99").status_code, 404)
 
     def test_desktop_control_lists_boards_and_requires_tray_to_quit(self):
         response = self.client.get("/api/dashboards")

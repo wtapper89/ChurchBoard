@@ -12,6 +12,8 @@ Core runtime components include:
 | HTTPX and HTTPCore | BSD-3-Clause | https://github.com/encode/httpx |
 | Uvicorn | BSD-3-Clause | https://github.com/Kludex/uvicorn |
 | Pillow | MIT-CMU | https://python-pillow.github.io/ |
+| OpenCV Python | Apache-2.0 | https://github.com/opencv/opencv-python |
+| NumPy | BSD-3-Clause | https://numpy.org/ |
 | pystray | LGPL-3.0 | https://github.com/moses-palmer/pystray |
 | AnyIO | MIT | https://github.com/agronholm/anyio |
 | Click | BSD-3-Clause | https://github.com/pallets/click |

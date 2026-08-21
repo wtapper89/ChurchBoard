@@ -18,7 +18,7 @@ import uvicorn
 import httpx
 import websockets
 from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
-from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse, RedirectResponse, Response
+from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse, RedirectResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
@@ -37,6 +37,7 @@ from app.modules.livekit import access_token as livekit_access_token
 from app.modules.prodmesh_rta import ProdMeshRTAClient
 from app.modules.behringer import BehringerClient
 from app.modules.thelightingcontroller import TheLightingControllerClient
+from app.modules.webcam import WebcamService
 from app.store import ConfigStore
 from app.update import download_update, update_status
 from app.version import __version__
@@ -160,10 +161,12 @@ async def lifespan(app: FastAPI):
     app.state.auth = AuthManager(store)
     app.state.modules = modules
     app.state.runtime = runtime
+    app.state.webcams = WebcamService()
     await runtime.start()
     try:
         yield
     finally:
+        app.state.webcams.close()
         await runtime.close()
 
 
@@ -451,6 +454,26 @@ async def uninstall_module(module_id: str, request: Request) -> None:
 @app.get("/api/dashboards/{identifier}")
 async def get_dashboard(identifier: str, request: Request) -> dict:
     return dashboard_or_404(store_from(request), identifier)
+
+
+@app.get("/api/integrations/webcam/devices")
+async def webcam_devices(request: Request) -> dict:
+    try:
+        items = await asyncio.to_thread(request.app.state.webcams.devices)
+    except RuntimeError as exc:
+        raise HTTPException(503, str(exc)) from exc
+    return {"items": items, "count": len(items)}
+
+
+@app.get("/api/integrations/webcam/stream/{device_index}")
+async def webcam_stream(device_index: int, request: Request) -> StreamingResponse:
+    if not 0 <= device_index <= 31:
+        raise HTTPException(404, "USB camera not found")
+    return StreamingResponse(
+        request.app.state.webcams.frames(device_index),
+        media_type="multipart/x-mixed-replace; boundary=frame",
+        headers={"Cache-Control": "no-store, no-cache, must-revalidate", "X-Accel-Buffering": "no"},
+    )
 
 
 @app.post("/api/dashboards", status_code=201)
@@ -1187,6 +1210,7 @@ async def get_runtime(request: Request, compact: bool = False) -> dict:
             "updated_at",
             "timing",
             "mics",
+            "use_planning_center_for_mics",
             "propresenter",
             "planning_center_live",
             "service_control",

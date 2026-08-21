@@ -154,6 +154,7 @@ function widgetStateKey(widget,state){
   if(widget.type==="livestreams")return`livestreams:${JSON.stringify([state.livestreams||[],settings.sources||[]])}`;
   if(widget.type==="propresenter_timers")return`propresenter-timers:${JSON.stringify(pp.timers||[])}`;
   if(widget.type==="ndi")return`ndi:${settings.source_name||""}`;
+  if(widget.type==="webcam")return`webcam:${JSON.stringify(settings)}`;
   if(widget.type==="prodmesh_rta")return`prodmesh-rta:${JSON.stringify(state.prodmesh_rta||{})}:${JSON.stringify(settings)}`;
   if(widget.type==="behringer_faders")return`behringer:${JSON.stringify(state.behringer||{})}:${JSON.stringify(settings)}`;
   if(widget.type==="lighting")return`lighting:${JSON.stringify(settings)}`;

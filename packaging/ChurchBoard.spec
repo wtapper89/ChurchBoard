@@ -133,6 +133,7 @@ if sys.platform == "darwin":
             "NSHighResolutionCapable": True,
             "NSLocalNetworkUsageDescription": "ChurchBoard discovers NDI sources and connects production devices and its hosted intercom on your local network.",
             "NSMicrophoneUsageDescription": "ChurchBoard's embedded ProdMesh RTA uses the selected audio input to measure sound level and frequency response.",
+            "NSCameraUsageDescription": "ChurchBoard displays video from the USB camera or capture device selected for a dashboard.",
             "LSUIElement": False,
         },
     )

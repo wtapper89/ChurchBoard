@@ -510,7 +510,9 @@ class RuntimeService:
             next_state["livestreams"] = await self._livestream_statuses(stream_sources, next_state.get("restream") or {}, next_state.get("livestreams") or [])
         elif not stream_sources:
             next_state["livestreams"] = []
-        self._apply_assignments(next_state, config.get("position_mic_map", {}))
+        use_planning_center_for_mics = bool((config.get("mics") or {}).get("use_planning_center_positions", True))
+        next_state["use_planning_center_for_mics"] = use_planning_center_for_mics
+        self._apply_assignments(next_state, config.get("position_mic_map", {}), use_planning_center_for_mics)
         self._apply_service_control(next_state)
         self.state = next_state
         return self.state
@@ -1006,7 +1008,19 @@ class RuntimeService:
         state["service_control"] = {"active": True, "index": index, "item_id": current.get("id"), "item_title": current.get("title")}
 
     @staticmethod
-    def _apply_assignments(state: dict[str, Any], mapping: dict[str, str]) -> None:
+    def _apply_assignments(state: dict[str, Any], mapping: dict[str, str], use_planning_center: bool = True) -> None:
+        if not use_planning_center:
+            for mic in state.get("mics", []):
+                mic["assignment"] = {
+                    "name": str(mic.get("name") or "Microphone"),
+                    "photo": str(mic.get("default_photo") or ""),
+                    "position": "Microphone status",
+                    "position_key": "",
+                    "team_id": "",
+                    "team_name": "",
+                    "standalone_mic": True,
+                }
+            return
         people: dict[str, dict[str, Any]] = {}
         for person in state.get("people", []):
             position = str(person.get("position") or "").strip().casefold()
@@ -1034,6 +1048,7 @@ class RuntimeService:
                 # attaching this microphone to the exact configured role.
                 mic_by_id[mic_id]["assignment"] = {
                     **person,
+                    "photo": str(person.get("photo") or mic_by_id[mic_id].get("default_photo") or ""),
                     "position": fallback_position,
                     "position_key": lookup,
                     "team_id": fallback_team or person.get("team_id", ""),

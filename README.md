@@ -12,6 +12,15 @@ ChurchBoard 2 adds a mobile-friendly Producer workspace, a module manager, autom
 
 Developers can use the [module development guide](docs/MODULE_DEVELOPMENT.md) with Codex or Claude. Valid manifests dropped into a `modules/` folder are discovered automatically, and modules can be updated independently of the core application.
 
+## Start here
+
+1. [Download and install ChurchBoard](#download-churchboard).
+2. Open **Setup & modules** and configure the integrations you use.
+3. Open **Boards**, create or edit a board, and add widgets.
+4. Invite volunteers to [Producer](docs/PRODUCER.md) for checklists and personal monitor mixes.
+
+Need help? Start with [Configuration](docs/CONFIGURATION.md), [Planning Center](docs/PLANNING_CENTER.md), or [Modules](docs/MODULES.md). For non-networked microphones and IEM packs, see [manual equipment assignments](docs/MICS.md).
+
 ## Watch the setup and demo video
 
 See ChurchBoard in action and follow the setup walkthrough in the **[ChurchBoard setup and demo video](https://youtu.be/pE_uWD24G2c)**.
@@ -63,23 +72,24 @@ Choose your computer and click its download link:
 
 | Your computer | Download |
 | --- | --- |
-| **Windows 10 or 11** | **[Download the Windows installer (.exe)](https://github.com/wtapper89/ChurchBoard/releases/latest/download/ChurchBoard-2.0.9-Windows-x64-Setup.exe)** |
-| **Mac with Apple silicon** — M1 or newer | **[Download the Apple silicon Mac disk image (.dmg)](https://github.com/wtapper89/ChurchBoard/releases/latest/download/ChurchBoard-2.0.9-macOS-arm64.dmg)** |
-| **Mac with an Intel processor** | **[Download the Intel Mac disk image (.dmg)](https://github.com/wtapper89/ChurchBoard/releases/latest/download/ChurchBoard-2.0.9-macOS-x86_64.dmg)** |
-| **Ubuntu or Debian Linux** | **[Download the Linux installer (.deb)](https://github.com/wtapper89/ChurchBoard/releases/latest/download/ChurchBoard-2.0.9-Linux-amd64.deb)** |
-| **Other 64-bit desktop Linux** | **[Download the portable Linux package (.tar.gz)](https://github.com/wtapper89/ChurchBoard/releases/latest/download/ChurchBoard-2.0.9-Linux-x86_64.tar.gz)** |
+| **Windows 10 or 11** | **[Download the Windows installer (.exe)](https://github.com/wtapper89/ChurchBoard/releases/latest/download/ChurchBoard-2.0.10-Windows-x64-Setup.exe)** |
+| **Mac with Apple silicon** — M1 or newer | **[Download the Apple silicon Mac disk image (.dmg)](https://github.com/wtapper89/ChurchBoard/releases/latest/download/ChurchBoard-2.0.10-macOS-arm64.dmg)** |
+| **Mac with an Intel processor** | **[Download the Intel Mac disk image (.dmg)](https://github.com/wtapper89/ChurchBoard/releases/latest/download/ChurchBoard-2.0.10-macOS-x86_64.dmg)** |
+| **Ubuntu or Debian Linux** | **[Download the Linux installer (.deb)](https://github.com/wtapper89/ChurchBoard/releases/latest/download/ChurchBoard-2.0.10-Linux-amd64.deb)** |
+| **Other 64-bit desktop Linux** | **[Download the portable Linux package (.tar.gz)](https://github.com/wtapper89/ChurchBoard/releases/latest/download/ChurchBoard-2.0.10-Linux-x86_64.tar.gz)** |
 
 Not sure which Mac you have? Choose **Apple menu → About This Mac**. If it says **Chip**, use Apple silicon. If it says **Processor**, use Intel.
 
 **Raspberry Pi:** jump to the [one-command Raspberry Pi installer](#raspberry-pi).
 
-[View all v2.0.9 downloads and release notes](https://github.com/wtapper89/ChurchBoard/releases/tag/v2.0.9)
+[View all v2.0.10 downloads and release notes](https://github.com/wtapper89/ChurchBoard/releases/tag/v2.0.10)
 
-### What's new in 2.0.9
+### What's new in 2.0.10
 
-- Adds an optional Producer QR Access module for opening the restricted Producer workspace from a phone on the same network.
-- Builds the current LAN address and Producer port directly into the QR code without using an external QR service.
-- Places the full-color ChurchBoard icon in the center of the code and responsively scales the complete QR layout inside its widget.
+- Adds manual microphones and IEM packs without an IP address or network monitoring (issue #40).
+- Supports a manual IEM pack and networked vocal mic assigned to the same Planning Center position, with no simulated telemetry for manual gear.
+- Simplifies module configuration and adds direct setup-guide links.
+- Adds a getting-started path and [mic/IEM setup instructions](docs/MICS.md).
 
 ## Install
 

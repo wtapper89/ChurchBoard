@@ -32,7 +32,7 @@ function filteredModules(){
   const term=document.querySelector("#module-search").value.trim().toLocaleLowerCase();
   const category=document.querySelector("#module-category").value;
   const installedOnly=document.querySelector("#module-installed-only").checked;
-  return moduleItems.filter(module=>(!term||`${module.name} ${module.vendor} ${module.description} ${module.category}`.toLocaleLowerCase().includes(term))&&(!category||module.category===category)&&(!installedOnly||module.installed));
+  return moduleItems.filter(module=>module.id!=="churchboard-core"&&(!term||`${module.name} ${module.vendor} ${module.description} ${module.category}`.toLocaleLowerCase().includes(term))&&(!category||module.category===category)&&(!installedOnly||module.installed));
 }
 
 function renderModules(){
@@ -44,7 +44,7 @@ function renderModules(){
 function moduleCard(module){
   const dependencies=(module.dependencies||[]).map(id=>moduleById(id)?.name||id);
   const state=module.update_available?'<span class="module-badge update">Update</span>':module.installed?'<span class="module-badge live">Installed</span>':'<span class="module-badge">Available</span>';
-  const actionLabel=module.installed?"Manage":module.update_available?"Review update":"View & add";
+  const actionLabel=module.installed?"Configure":module.update_available?"Review update":"View & add";
   return `<article class="module-card ${module.installed?"installed":""} ${module.update_available?"update":""}"><div class="module-card-header"><span class="module-card-icon">${escapeHtml(iconFor(module))}</span><div><h3>${escapeHtml(module.name)}</h3><span class="module-card-vendor">${escapeHtml(module.vendor)} · ${escapeHtml(module.available_version)}</span></div><div class="module-badges">${state}</div></div><p>${escapeHtml(module.description)}</p><div class="module-dependency-note">${dependencies.length?`Adds: ${escapeHtml(dependencies.join(", "))}`:`${(module.widgets||[]).length} widget${(module.widgets||[]).length===1?"":"s"} · ${(module.pages||[]).length} page${(module.pages||[]).length===1?"":"s"}`}</div><div class="module-card-actions"><button class="button ${module.installed?"secondary":""}" data-module-open="${escapeHtml(module.id)}">${actionLabel}</button></div></article>`;
 }
 
@@ -62,7 +62,7 @@ async function openModule(moduleId){
   const capabilities=[...(module.pages||[]).map(page=>`Page · ${page.name}`),...(module.widgets||[]).map(widget=>`Widget · ${widget.name}`)];
   document.querySelector("#module-detail-widgets").innerHTML=capabilities.map(value=>`<span>${escapeHtml(value)}</span>`).join("");
   document.querySelector("#module-detail-widgets-section").hidden=!capabilities.length;
-  const configure=module.installed?"":"";
+  const configure=module.documentation? `<a class="button secondary" href="${escapeHtml(module.documentation)}" target="_blank" rel="noopener">Read setup instructions</a>`:"";
   const update=module.update_available?`<button class="button" data-module-update="${escapeHtml(module.id)}">Update to ${escapeHtml(module.available_version)}</button>`:"";
   const install=!module.installed?`<button class="button" data-module-install="${escapeHtml(module.id)}">Add module${dependencies.length?" and requirements":""}</button>`:"";
   const remove=module.installed&&!module.core?`<button class="button danger module-danger" data-module-remove="${escapeHtml(module.id)}">Remove</button>`:"";

@@ -84,11 +84,11 @@ BUILTIN_MODULES = [
         "configuration_path": "/modules#proclaim", "documentation": "/docs/PROCLAIM.md", "frontend": {"renderer": "legacy-adapter"},
     },
     {
-        "id": "mics", "name": "Mics", "vendor": "ChurchBoard", "version": "3.0.0",
-        "description": "Shure and Sennheiser wireless receiver status, battery, RF, audio, mute, and position mapping.", "category": "Wireless audio",
+        "id": "mics", "name": "Mics", "vendor": "ChurchBoard", "version": "3.1.0",
+        "description": "Assign microphones and IEM packs to positions. Monitor networked Shure and Sennheiser receivers, or add manual equipment without an IP address.", "category": "Wireless audio",
         "settings_keys": ["mics", "shure", "sennheiser"], "dependencies": [], "provides": ["churchboard.microphones/v1"], "consumes": ["churchboard.people/v1?"], "widgets": [], "pages": [],
         "setup": [{"title": "Use the production LAN", "text": "Connect each receiver and the ChurchBoard computer to the same trusted network."}, {"title": "Add receiver channels", "text": "Choose Shure or Sennheiser for each channel, then enter its IP, name, and optional Planning Center position."}],
-        "configuration_path": "/modules#mics", "frontend": {},
+        "configuration_path": "/modules#mics", "documentation": "/docs/MICS.md", "frontend": {},
     },
     {
         "id": "open-sound-meter", "name": "Open Sound Meter", "vendor": "Open Sound Meter", "version": "2.0.0",

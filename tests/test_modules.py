@@ -80,7 +80,7 @@ class ModuleRegistryTests(unittest.TestCase):
         installed = self.data["modules"]["installed"]
         self.assertNotIn("shure-wireless", installed)
         self.assertNotIn("sennheiser-wireless", installed)
-        self.assertEqual(installed["mics"]["version"], "3.0.0")
+        self.assertEqual(installed["mics"]["version"], "3.1.0")
         self.assertTrue(installed["mics"]["enabled"])
 
     def test_uninstalling_mics_disables_both_vendor_clients(self):

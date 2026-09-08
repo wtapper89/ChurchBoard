@@ -501,6 +501,10 @@ class RuntimeService:
             # useful. Once demo mode is off, never carry those sample mics into
             # a real Planning Center plan that has no wireless configuration.
             next_state["mics"] = []
+        next_state["mics"] = [mic for mic in next_state.get("mics", []) if not mic.get("unmonitored")] + [
+            {**device, "unmonitored": True, "online": False, "errors": []}
+            for device in config.get("mics", {}).get("manual_devices", [])
+        ]
         restream_settings = config.get("restream", {})
         expires_at = float(restream_settings.get("access_token_expires_at") or 0)
         if restream_settings.get("refresh_token") and expires_at and expires_at <= datetime.now(timezone.utc).timestamp() + 120:
@@ -1109,7 +1113,9 @@ class RuntimeService:
                 if scheduled_name:
                     people[scheduled_name] = person
         mic_by_id = {mic.get("id"): mic for mic in state.get("mics", [])}
-        for position, mic_id in mapping.items():
+        assignments = list(mapping.items())
+        assignments.extend((mic["position_key"], mic["id"]) for mic in state.get("mics", []) if mic.get("position_key"))
+        for position, mic_id in assignments:
             if mic_id in mic_by_id:
                 lookup = str(position).strip()
                 person = people.get(lookup) or people.get(lookup.casefold())

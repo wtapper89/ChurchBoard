@@ -690,6 +690,12 @@ class SennheiserTests(unittest.TestCase):
 
 
 class RuntimeAssignmentTests(unittest.TestCase):
+    def test_manual_pack_shares_position_with_networked_mic(self):
+        state = {"people": [{"name": "Jordan Lee", "position_key": "band::vox 1"}],
+                 "mics": [{"id": "vocal"}, {"id": "iem", "unmonitored": True, "position_key": "band::vox 1"}]}
+        RuntimeService._apply_assignments(state, {"band::vox 1": "vocal"})
+        self.assertEqual([mic["assignment"]["name"] for mic in state["mics"]], ["Jordan Lee", "Jordan Lee"])
+
     def test_live_mode_without_configured_mics_drops_seeded_demo_telemetry(self):
         with tempfile.TemporaryDirectory() as directory:
             store = ConfigStore(Path(directory) / "state.json")

@@ -141,6 +141,12 @@ def strip_name_path(model: str, strip: dict[str, Any]) -> str | None:
 
 
 class BehringerClient:
+    def __new__(cls, settings):
+        if settings.get("model") in {"avantis", "dlive", "sq", "yamaha"}:
+            from app.modules.consoles import ConsoleClient
+            return ConsoleClient(settings)
+        return super().__new__(cls)
+
     def __init__(self, settings: dict[str, Any]):
         self.settings = settings
         self.model = str(settings.get("model") or "x32").casefold()

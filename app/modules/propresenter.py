@@ -88,7 +88,12 @@ class ProPresenterClient:
         if fetch_macros:
             names.append("macros")
             requests.append(self._http().get(f"{base}/v1/macros"))
-        responses = dict(zip(names, await asyncio.gather(*requests)))
+        # Optional playlist/macro failures must not take live slides offline.
+        results = await asyncio.gather(*requests, return_exceptions=True)
+        if isinstance(results[0], Exception):
+            raise results[0]
+        responses = {name: result for name, result in zip(names, results)
+                     if not isinstance(result, Exception)}
         responses["slide"].raise_for_status()
         try:
             slide_payload = responses["slide"].json() if getattr(responses["slide"], "status_code", 200) != 204 else {}
@@ -99,8 +104,8 @@ class ProPresenterClient:
         # not a lost API connection. Keep macros, timers and the playlist
         # available while presenting empty Now/Next data.
         slide = slide_payload if isinstance(slide_payload, dict) else {}
-        index_response = responses["index"]
-        index_payload = index_response.json() if index_response.is_success else 0
+        index_response = responses.get("index")
+        index_payload = index_response.json() if index_response is not None and index_response.is_success else 0
         active_response = responses.get("active")
         if active_response is not None and active_response.is_success:
             active_payload = active_response.json()
@@ -138,10 +143,12 @@ class ProPresenterClient:
                 or (missing_details and clock - self._playlist_details_refreshed >= 5.0)
                 or clock - self._playlist_details_refreshed >= 10.0
             ):
-                detail_responses = await asyncio.gather(*[
-                    self._http().get(f"{base}/v1/presentation/{quote(uuid, safe='')}")
-                    for uuid in presentation_uuids
-                ], return_exceptions=True)
+                limit = asyncio.Semaphore(4)
+                async def fetch_detail(uuid):
+                    async with limit:
+                        return await self._http().get(f"{base}/v1/presentation/{quote(uuid, safe='')}")
+                detail_responses = await asyncio.gather(
+                    *(fetch_detail(uuid) for uuid in presentation_uuids), return_exceptions=True)
                 for uuid, response in zip(presentation_uuids, detail_responses):
                     if not isinstance(response, Exception) and response.is_success:
                         payload = response.json()
@@ -224,12 +231,24 @@ class ProPresenterClient:
         else:
             playlist_context = browser_playlist_context
         playlist_presentations = self._playlist_presentations(self._playlist_items_payload, playlist_context)
+        if not browser_playlist_context.get("playlist_uuid"):
+            # Library playback has a live presentation but no active playlist.
+            # Show its slides rather than treating the null destination wrapper
+            # from /playlist/active as an empty presentation card.
+            playlist_presentations = [{
+                "index": 0, "title": self._presentation_title(presentation),
+                "presentation_uuid": presentation_uuid, "active": True,
+                "is_pco": False, "type": "presentation", "triggerable": True,
+                "_presentation_payload": presentation,
+            }] if presentation_uuid else []
         linked_playlist_row = next(
             (
                 row for row in playlist_presentations
                 if presentation_uuid
                 and row.get("presentation_uuid") == presentation_uuid
                 and row.get("is_pco")
+                and (not active_playlist_context.get("playlist_uuid")
+                     or active_playlist_context.get("playlist_uuid") == browser_playlist_context.get("playlist_uuid"))
             ),
             None,
         )
@@ -464,7 +483,13 @@ class ProPresenterClient:
                 for child in value:
                     visit(child)
             elif isinstance(value, dict):
-                if any(key in value for key in ("presentation", "presentation_id", "presentation_uuid")) or str(value.get("type") or "").casefold() == "presentation":
+                destination = value.get("presentation")
+                if isinstance(destination, dict) and any(key in destination for key in ("playlist", "item", "playlist_item")):
+                    visit(destination.get("playlist_item"))
+                    return
+                if (isinstance(value.get("presentation"), dict)
+                    or value.get("presentation_id") or value.get("presentation_uuid")
+                    or str(value.get("type") or "").casefold() == "presentation"):
                     rows.append(value)
                 else:
                     found_children = False

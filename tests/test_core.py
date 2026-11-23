@@ -158,6 +158,18 @@ class StoreTests(unittest.TestCase):
             self.assertEqual(board["background_color"], "#0a0d12")
             self.assertNotIn("theme", board)
 
+    def test_deleted_audio_meter_stays_deleted_after_reload(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "state.json"
+            store = ConfigStore(path)
+            data = store.load()
+            board = next(board for board in data["dashboards"] if board["id"] == "audio")
+            self.assertTrue(any(widget["type"] == "spl" for widget in board["widgets"]))
+            board["widgets"] = [widget for widget in board["widgets"] if widget["type"] != "spl"]
+            store.save(data)
+            saved = next(board for board in ConfigStore(path).load()["dashboards"] if board["id"] == "audio")
+            self.assertEqual(saved["widgets"], board["widgets"])
+
     def test_old_mic_widget_migrates_to_combined_assignments(self):
         with tempfile.TemporaryDirectory() as directory:
             store = ConfigStore(Path(directory) / "state.json")
@@ -690,6 +702,15 @@ class SennheiserTests(unittest.TestCase):
 
 
 class RuntimeAssignmentTests(unittest.TestCase):
+    def test_demo_refresh_after_live_mode_without_a_selected_service(self):
+        with tempfile.TemporaryDirectory() as directory:
+            runtime = RuntimeService(ConfigStore(Path(directory) / "state.json"))
+            runtime.state = {"service": None}
+            state = asyncio.run(runtime.refresh(force=True))
+            self.assertEqual(state["service"]["id"], "demo")
+            self.assertEqual(len(state["mics"][0]["audio_history"]), 40)
+            self.assertEqual(state["mics"][0]["audio_history"][-1], state["mics"][0]["audio"])
+
     def test_manual_pack_shares_position_with_networked_mic(self):
         state = {"people": [{"name": "Jordan Lee", "position_key": "band::vox 1"}],
                  "mics": [{"id": "vocal"}, {"id": "iem", "unmonitored": True, "position_key": "band::vox 1"}]}

@@ -42,3 +42,5 @@ This workflow currently supports Behringer X32, Behringer WING-family, and Midas
 ## Credits and protocol notes
 
 The OSC paths and X32 fader conversion were implemented with reference to Bitfocus Companion's open-source [Behringer X32 module](https://github.com/bitfocus/companion-module-behringer-x32) and [Behringer WING module](https://github.com/bitfocus/companion-module-behringer-wing), both published under the MIT License. Companion code is not bundled into ChurchBoard; ChurchBoard contains its own small OSC client. Behringer, X32, WING, and Midas are trademarks of their respective owners, and ChurchBoard is not affiliated with or endorsed by them.
+
+Additional console families (Avantis, dLive, SQ and Yamaha CL/QL/TF) are available in the same module. See [Audio consoles](CONSOLE_INTEGRATIONS.md) for ports and supported controls.

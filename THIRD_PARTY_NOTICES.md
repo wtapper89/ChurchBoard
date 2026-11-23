@@ -35,3 +35,13 @@ Micboard and NewsTalentMonitorPlus are credited inspirations, not bundled depend
 Packaged ChurchBoard installers include the reviewed ProdMesh Remote RTA engine and its dynamically linked Qt runtime so embedded mode requires no separate product installation. ProdMesh Remote RTA is Copyright © 2026 Justin Beale and licensed under the MIT License. Its exact license and the applicable Qt license text are included in the packaged legal notices. Remote mode accesses a separately running copy through its documented read-only network API. The ShowXpress/TheLightingController integration was contributed by Caleb Hines of WorshipWarehouse and uses the controller's External Application protocol; ShowXpress and TheLightingController remain separately installed products.
 
 The NDI runtime is not stored in this repository and is not part of a normal source build. Authorized release builders may optionally package an app-local runtime under the NDI SDK agreement. Those builds must include `Processing.NDI.Lib.Licenses.txt` beside the runtime and remain subject to NDI's SDK terms and third-party rights. See [ChurchBoard legal information](LEGAL.md).
+
+## ProDeck console protocol maps
+
+The Allen & Heath channel maps, MIDI request/control sequences, SQ taper table,
+and Yamaha RCP mapping in `app/modules/consoles.py` are adapted from
+https://github.com/whiteoakmedia/prodeck (MIT License).
+Copyright (c) 2026 Zach Green. The complete license is in `licenses/PRODECK.txt`.
+
+Slide-Desk was reviewed as a behavioral reference for ProPresenter reliability.
+No Slide-Desk source code was incorporated into ChurchBoard.

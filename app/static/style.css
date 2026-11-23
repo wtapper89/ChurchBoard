@@ -287,3 +287,26 @@ body.moving-widget,body.moving-widget *{cursor:grabbing!important}
 
 /* Faithlife Proclaim controls and preview surfaces. */
 .proclaim-control-pad{grid-template-columns:repeat(3,minmax(0,1fr))}.proclaim-text-slides{display:grid;grid-template-columns:1.25fr 1fr;gap:10px;height:100%}.proclaim-text-slides.one{grid-template-columns:1fr}.proclaim-text-card{display:grid;align-content:center;gap:clamp(5px,2cqw,10px);min-width:0;padding:clamp(14px,4cqw,30px);border:1px solid var(--glass-inner-line,var(--line));border-radius:14px;background:var(--glass-inner,#080c12)}.proclaim-text-card.current{border-color:var(--accent)}.proclaim-text-card small{color:var(--muted);font-weight:850;letter-spacing:.12em}.proclaim-item-title{overflow:hidden;color:var(--muted);font-size:clamp(.7rem,2.6cqw,1.05rem);font-weight:700;text-overflow:ellipsis;white-space:nowrap}.proclaim-text-card strong{font-size:clamp(.9rem,5cqw,2.5rem);font-weight:650;line-height:1.12;text-wrap:balance;white-space:pre-line}.proclaim-text-card em{color:var(--muted);font-size:clamp(.62rem,2.2cqw,.85rem);font-style:normal}.proclaim-ndi{position:relative;width:100%;height:100%;overflow:hidden;border-radius:12px;background:#05080d}.proclaim-ndi img{width:100%;height:100%;object-fit:contain}.proclaim-ndi span{position:absolute;right:12px;bottom:12px;left:12px;padding:7px 10px;border:1px solid #ffffff2b;border-radius:9px;background:#05080dbd;color:#fff;font-weight:800;backdrop-filter:blur(12px)}
+
+.order-description{display:block;min-width:0;font-size:.82em;line-height:1.3;color:var(--muted);white-space:pre-line;overflow-wrap:anywhere}
+
+.mic-card .mic-telemetry{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:3px 8px;min-width:0;align-content:start}
+.mic-telemetry .meter-label{display:flex;justify-content:space-between;gap:4px}
+.mic-audio{grid-column:1/-1;min-width:0}
+.mic-waveform{
+  display:block;
+  width:100%;
+  height:clamp(48px,19cqh,128px);
+  background:var(--glass-inner-deep);
+  border-radius:3px;
+}
+.mic-waveform polyline{
+  fill:none;
+  stroke:var(--health,var(--accent));
+  stroke-width:1px;
+  stroke-linejoin:round;
+  stroke-linecap:round;
+}
+.mic-compact .mic-waveform{height:clamp(32px,13cqh,64px)}
+.mic-micro .mic-waveform{height:clamp(22px,9cqh,36px)}
+.mic-micro .mic-telemetry{gap:1px 4px}

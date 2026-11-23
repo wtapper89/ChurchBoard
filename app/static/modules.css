@@ -8,3 +8,5 @@
 /* Per-microphone fallback portraits in the Mics module. */
 .module-config-form .module-mic-row{grid-template-columns:.8fr 1.15fr .9fr 70px 1.2fr minmax(125px,.75fr) 38px}
 .module-mic-photo-picker{position:relative;min-height:48px;display:flex;align-items:center;gap:8px;padding:5px;border:1px solid var(--line);border-radius:9px;background:#080c13;cursor:pointer}.module-mic-photo-picker img{width:38px;height:38px;object-fit:cover;border-radius:8px}.module-mic-photo-picker input{position:absolute;inset:0;opacity:0;cursor:pointer}.module-mic-photo-picker b{color:var(--text);font-size:.72rem}.module-mic-photo-empty{display:grid;place-items:center;width:38px;height:38px;border-radius:8px;background:#1a2330;color:var(--muted);font-size:.55rem}.module-mic-photo>button{border:0;background:transparent;color:var(--danger);padding:3px;text-align:left;cursor:pointer}@media(max-width:950px){.module-config-form .module-mic-row{grid-template-columns:repeat(2,minmax(0,1fr))}.module-mic-row>.icon-button{justify-self:end}.module-mic-photo{grid-column:1/-1}}
+
+.core-placeholder-preview{display:block;width:96px;height:96px;object-fit:contain;margin:8px 0}

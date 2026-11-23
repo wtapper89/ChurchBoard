@@ -79,14 +79,21 @@ class RuntimeService:
     def reload_module(self, module_id: str) -> None:
         """Drop cached clients so an updated module is used on the next poll."""
         if module_id == "behringer-mixer":
+            if self._behringer_client is not None and hasattr(self._behringer_client, "close"):
+                self._behringer_client.close()
             self._behringer_client = None
             self._behringer_key = None
 
     def behringer_client(self, settings: dict[str, Any]) -> BehringerClient:
-        client_type = self.module_updates.load_class(
-            "behringer-mixer", "behringer.py", "BehringerClient", BehringerClient
-        )
-        return client_type(settings)
+        key = tuple(settings.get(k) for k in ("enabled", "model", "host", "port", "midi_channel"))
+        if self._behringer_client is None or self._behringer_key != key:
+            if self._behringer_client is not None and hasattr(self._behringer_client, "close"):
+                self._behringer_client.close()
+            client_type = self.module_updates.load_class(
+                "behringer-mixer", "behringer.py", "BehringerClient", BehringerClient
+            )
+            self._behringer_client, self._behringer_key = client_type(settings), key
+        return self._behringer_client
 
     @staticmethod
     def _manual_service_time_id(config: dict[str, Any], service: dict[str, Any] | None) -> str:
@@ -188,6 +195,8 @@ class RuntimeService:
                 await self._task
             except asyncio.CancelledError:
                 pass
+        if self._behringer_client is not None and hasattr(self._behringer_client, "close"):
+            self._behringer_client.close()
         if self._propresenter_client is not None:
             await self._propresenter_client.close()
             self._propresenter_client = None
@@ -255,8 +264,10 @@ class RuntimeService:
         configured_stream_sources = self._configured_stream_sources(stored_data)
         configured_behringer_strips = self._configured_behringer_strips(stored_data)
         if config.get("demo_mode"):
-            demo = deepcopy(self.state) if self.state.get("service", {}).get("id") == "demo" else self.demo_state()
+            has_demo_state = (self.state.get("service") or {}).get("id") == "demo" and bool(self.state.get("mics"))
+            demo = deepcopy(self.state) if has_demo_state else self.demo_state()
             demo["organization_name"] = config.get("organization_name", "My Church")
+            demo["unassigned_icon"] = config.get("unassigned_icon", "")
             demo["timezone"] = config.get("timezone", "")
             demo["updated_at"] = datetime.now(timezone.utc).isoformat()
             demo["timing"] = calculate_timing(demo.get("service"))
@@ -266,11 +277,16 @@ class RuntimeService:
             demo["restream"] = {"connected": False, "status": "offline", "title": "Restream monitoring is unavailable in demo mode", "destinations": []}
             demo["livestreams"] = [{**self._public_stream_source(source), "label": source.get("label") or str(source.get("provider") or "Stream").title(), "live": False, "status": "demo", "checked": False} for source in configured_stream_sources]
             demo["behringer"] = self._demo_behringer(configured_behringer_strips)
+            for index, mic in enumerate(demo.get("mics", [])):
+                if mic.get("online"):
+                    phase = int(host_clock * 2) + index * 7
+                    mic["audio"] = 8 + (phase * 37 % 71)
+                    mic["audio_history"] = [8 + (sample * 37 % 71) for sample in range(phase - 39, phase + 1)]
             self._apply_service_control(demo)
             self.state = demo
             return self.state
         next_state = deepcopy(self.state)
-        next_state.update({"organization_name": config.get("organization_name", "ChurchBoard"), "timezone": config.get("timezone", ""), "updated_at": datetime.now(timezone.utc).isoformat(), "manual_plan": config.get("manual_plan"), "manual_service_time": config.get("manual_service_time")})
+        next_state.update({"organization_name": config.get("organization_name", "ChurchBoard"), "unassigned_icon": config.get("unassigned_icon", ""), "timezone": config.get("timezone", ""), "updated_at": datetime.now(timezone.utc).isoformat(), "manual_plan": config.get("manual_plan"), "manual_service_time": config.get("manual_service_time")})
         live_config = config.get("planning_center", {}).get("live_from_propresenter") or {}
         if not live_config.get("enabled") or not self._apply_cached_live_timing(next_state):
             self._apply_plan_detail(next_state, next_state.get("service"), config)
@@ -294,10 +310,7 @@ class RuntimeService:
         elif not self._prodmesh_client.configured:
             next_state["prodmesh_rta"] = {"connected": False, "error": "ProdMesh RTA is not enabled"}
         behringer_settings = config.get("behringer", {})
-        behringer_key = (bool(behringer_settings.get("enabled")), str(behringer_settings.get("model") or "x32"), str(behringer_settings.get("host") or ""), int(behringer_settings.get("port") or 10023))
-        if self._behringer_client is None or behringer_key != self._behringer_key:
-            client_type = self.module_updates.load_class("behringer-mixer", "behringer.py", "BehringerClient", BehringerClient)
-            self._behringer_client, self._behringer_key = client_type(behringer_settings), behringer_key
+        self.behringer_client(behringer_settings)
         behringer_due = clock - self._last_refresh["behringer"] >= max(.12, float(behringer_settings.get("refresh_seconds") or .2))
         if self._behringer_client.configured and configured_behringer_strips and (force or behringer_due):
             self._last_refresh["behringer"] = clock
@@ -339,15 +352,8 @@ class RuntimeService:
                 service = next_state.get("service") or {}
                 if live_config.get("enabled") and fresh_presentation.get("connected") and service.get("items"):
                     current_id = str(((next_state.get("timing") or {}).get("current_item") or {}).get("id") or "")
-                    preliminary_match = self._match_presentation_item(
-                        str(fresh_presentation.get("title") or ""),
-                        service.get("items") or [],
-                        current_id,
-                        live_config,
-                        service_item_title=str(fresh_presentation.get("service_item_title") or ""),
-                        service_item_index=fresh_presentation.get("service_item_index"),
-                        service_item_index_is_absolute=bool(fresh_presentation.get("service_item_index_is_absolute")),
-                        is_pco_item=bool(fresh_presentation.get("service_item_is_pco")),
+                    preliminary_match = self._match_propresenter_item(
+                        fresh_presentation, service["items"], current_id, live_config
                     )
                     if preliminary_match:
                         fresh_presentation["planning_center_item_id"] = preliminary_match.get("id")
@@ -493,7 +499,17 @@ class RuntimeService:
                 shure.status() if shure.configured else asyncio.sleep(0, result=[]),
                 sennheiser.status() if sennheiser.configured else asyncio.sleep(0, result=[]),
             )
+            previous_mics = {
+                mic["id"]: mic for mic in next_state.get("mics", [])
+                if mic.get("id") and not mic.get("unmonitored")
+            } if (next_state.get("service") or {}).get("id") != "demo" else {}
             next_state["mics"] = shure_status + sennheiser_status
+            for mic in next_state["mics"]:
+                if mic.get("online"):
+                    previous = previous_mics.get(mic.get("id"), {})
+                    mic["audio_history"] = [*previous.get("audio_history", [])[-39:], mic.get("audio", 0)]
+                else:
+                    mic["audio_history"] = []
             self._last_refresh["shure"] = clock
             self._last_refresh["sennheiser"] = clock
         elif not shure.configured and not sennheiser.configured:
@@ -616,7 +632,10 @@ class RuntimeService:
             state["planning_center_live"] = {**base_status, "message": f"Waiting for an active {source_label} presentation"}
             return
         current_item_id = str((live or {}).get("current_item_id") or ((state.get("timing") or {}).get("current_item") or {}).get("id") or "")
-        target = self._match_presentation_item(title, service.get("items") or [], current_item_id, settings, service_item_title=service_item_title, service_item_index=service_item_index, service_item_index_is_absolute=service_item_index_is_absolute, is_pco_item=is_pco_item)
+        if source == "propresenter":
+            target = self._match_propresenter_item(presentation, service["items"], current_item_id, settings)
+        else:
+            target = self._match_presentation_item(title, service.get("items") or [], current_item_id, settings, service_item_title=service_item_title, service_item_index=service_item_index, service_item_index_is_absolute=service_item_index_is_absolute, is_pco_item=is_pco_item)
         if target:
             presentation["planning_center_item_id"] = target.get("id")
             presentation["planning_center_item_title"] = target.get("title")
@@ -654,7 +673,10 @@ class RuntimeService:
                     return
             if not live.get("has_control"):
                 raise ValueError("ChurchBoard requested control, but Planning Center did not assign it")
-            items = service.get("items") or []
+            # LIVE navigation skips section headers; distances must use the
+            # same playable rows or crossing a header overshoots and oscillates.
+            items = [item for item in service.get("items") or []
+                     if str(item.get("item_type") or "").casefold() != "header"]
             current_index = next((index for index, item in enumerate(items) if str(item.get("id")) == str(live.get("current_item_id"))), -1)
             target_index = next((index for index, item in enumerate(items) if str(item.get("id")) == str(target.get("id"))), -1)
             if target_index < 0:
@@ -676,6 +698,8 @@ class RuntimeService:
                 raise ValueError("The matching item is more than 20 service items away")
             action = "go_to_next_item" if difference > 0 else "go_to_previous_item"
             for _ in range(abs(difference)):
+                if str(live.get("current_item_id") or "") == str(target.get("id")):
+                    break
                 live = await pc.live_action(service, live, action) or live
             self._service_control = {"active": False}
             self._remember_live(service, live)
@@ -788,8 +812,61 @@ class RuntimeService:
         return candidate
 
     @classmethod
+    def _match_propresenter_item(cls, presentation, items, current_item_id, settings):
+        playable = [item for item in items if str(item.get("item_type") or "").casefold() != "header"]
+        title = presentation.get("title") or ""
+        linked_title = presentation.get("service_item_title") or ""
+        is_linked = presentation.get("service_item_is_pco")
+        titles = [title, linked_title] if is_linked else [title]
+        current = next((item for item in playable if str(item.get("id")) == current_item_id), None)
+
+        def exact(name):
+            return [item for item in playable if cls._title_score(name, item.get("title") or "") == 1]
+
+        # Both the Planning Center label and the live document name can
+        # identify the item. Check names before trusting a playlist index.
+        for name in titles:
+            matches = exact(name)
+            if matches:
+                return min(matches, key=lambda item: abs(playable.index(item) - (playable.index(current) if current else 0)))
+
+        rows = [row for row in presentation.get("playlist_presentations") or [] if row.get("triggerable", True)]
+        active_rows = [i for i, row in enumerate(rows) if row.get("active")]
+        if not active_rows and presentation.get("presentation_uuid"):
+            active_rows = [i for i, row in enumerate(rows)
+                           if row.get("presentation_uuid") == presentation["presentation_uuid"]]
+        if len(active_rows) == 1:
+            index = active_rows[0]
+            if 0 < index < len(rows) - 1:
+                before = exact(rows[index - 1].get("title") or "")
+                after = exact(rows[index + 1].get("title") or "")
+                if len(before) == len(after) == 1:
+                    left, right = playable.index(before[0]), playable.index(after[0])
+                    if right - left == 2:
+                        return playable[left + 1]
+
+        linked = cls._match_presentation_item(
+            title, items, current_item_id, settings,
+            service_item_title=linked_title,
+            service_item_index=presentation.get("service_item_index"),
+            service_item_index_is_absolute=bool(presentation.get("service_item_index_is_absolute")),
+            is_pco_item=bool(is_linked),
+        )
+        if linked:
+            return linked
+        scored = [(max(cls._title_score(name, item.get("title") or "") for name in titles), item)
+                  for item in playable]
+        best = max((score for score, _ in scored), default=0.0)
+        matches = [item for score, item in scored if score == best]
+        if best >= 0.5 and len(matches) == 1:
+            return matches[0]
+        # With no reliable position, keep the current item instead of advancing
+        # on every poll while the same unmatched presentation stays on air.
+        return current
+
+    @classmethod
     def _match_presentation_item(cls, title: str, items: list[dict[str, Any]], current_item_id: str, settings: dict[str, Any], *, service_item_title: str = "", service_item_index: int | None = None, service_item_index_is_absolute: bool = False, is_pco_item: bool = False) -> dict[str, Any] | None:
-        candidates = list(items)
+        candidates = [item for item in items if str(item.get("item_type") or "").casefold() != "header"]
         if is_pco_item and service_item_index_is_absolute and isinstance(service_item_index, int) and 0 <= service_item_index < len(items):
             linked_item = items[service_item_index]
             if str(linked_item.get("item_type") or "").casefold() != "header":

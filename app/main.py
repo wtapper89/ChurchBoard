@@ -652,6 +652,8 @@ async def update_settings(payload: SettingsUpdate, request: Request) -> dict:
     store = store_from(request)
     data = store.load()
     settings = payload.model_dump()
+    if settings["unassigned_icon"] is None:
+        settings["unassigned_icon"] = data["settings"].get("unassigned_icon", "")
     server = settings.get("server") or {}
     try:
         port = int(server.get("port") or 8040)

@@ -30,6 +30,7 @@ def default_data() -> dict[str, Any]:
         "version": 3,
         "settings": {
             "organization_name": "My Church",
+            "unassigned_icon": "",
             "timezone": "America/New_York",
             "demo_mode": True,
             "planning_center": {
@@ -151,8 +152,6 @@ class ConfigStore:
                 baseline["producer"][key] = list(baseline["producer"].get(key) or [])
             for dashboard in baseline.get("dashboards", []):
                 dashboard.pop("theme", None)
-                if dashboard.get("id") == "audio" and not any(widget.get("type") == "spl" for widget in dashboard.get("widgets", [])):
-                    dashboard.setdefault("widgets", []).append({"id": "osm", "type": "spl", "x": 7, "y": 8, "w": 5, "h": 3, "title": "Open Sound Meter", "settings": {"green_max": 75, "orange_max": 85, "reports_enabled": True}})
                 color = str(dashboard.get("background_color") or "").strip().lower()
                 valid_color = len(color) == 7 and color.startswith("#") and all(
                     character in "0123456789abcdef" for character in color[1:]

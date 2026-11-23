@@ -6,6 +6,8 @@ import re
 import socket
 from typing import Any
 
+from app.modules.sennheiser_g4 import query_g4
+
 
 def clamp(value: Any, minimum: float, maximum: float) -> int:
     try:
@@ -87,10 +89,10 @@ class SennheiserClient:
         grouped: dict[tuple[str, int], dict[str, Any]] = {}
         for mic in self.settings.get("mics") or []:
             host = str(mic.get("host") or "").strip()
-            port = int(mic.get("port") or 45)
+            port = int(mic.get("port") or (53212 if mic.get("model") == "ew-g4" else 45))
             if not host:
                 continue
-            receiver = grouped.setdefault((host, port), {"id": re.sub(r"[^a-z0-9]+", "-", host.casefold()).strip("-") or "sennheiser", "name": mic.get("receiver_name") or host, "host": host, "port": port, "channel_configs": []})
+            receiver = grouped.setdefault((host, port), {"id": re.sub(r"[^a-z0-9]+", "-", host.casefold()).strip("-") or "sennheiser", "name": mic.get("receiver_name") or host, "host": host, "port": port, "model": mic.get("model"), "channel_configs": []})
             receiver["channel_configs"].append(mic)
         return list(grouped.values()) if grouped else list(self.settings.get("receivers") or [])
 
@@ -100,8 +102,12 @@ class SennheiserClient:
 
     async def _receiver(self, receiver: dict[str, Any]) -> list[dict[str, Any]]:
         configs = receiver.get("channel_configs") or []
-        channels = sorted({int(item.get("channel") or 1) for item in configs}) if configs else list(range(1, int(receiver.get("channels") or 2) + 1))
+        channels = sorted({int(item.get("channel") or 1) for item in configs}) if configs else list(range(1, int(receiver.get("channels") or (1 if receiver.get("model") == "ew-g4" else 2)) + 1))
         try:
+            if receiver.get("model") == "ew-g4":
+                if channels != [1]:
+                    raise ValueError("EW G4 receivers have one channel; select channel 1")
+                return [await query_g4(receiver)]
             response = await self._udp_query(str(receiver.get("host") or ""), int(receiver.get("port") or 45), ssc_request(channels))
             return parse_ssc_response(response, receiver, channels)
         except (OSError, asyncio.TimeoutError, ValueError, json.JSONDecodeError) as exc:

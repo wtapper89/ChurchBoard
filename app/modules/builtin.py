@@ -25,7 +25,7 @@ BUILTIN_MODULES = [
         "widgets": [
             widget("service", "Service", "Service & timing", 5, 2), widget("timing", "Timers", "Service & timing", 4, 2),
             widget("assignments", "Scheduled Positions & Mics", "Planning Center", 7, 6, team_ids=[], position_keys=[], position_labels={}, display_mode="photos", card_grouping="person", use_planning_center_icon=False, unassigned_media_title="Icon"),
-            widget("order", "Order of service", "Service & timing", 5, 3, display_mode="current", limit=6, show_leader=False, show_mic=False, show_production_note=False, production_note_field="", production_note_fields=[], production_note_colors={}),
+            widget("order", "Order of service", "Service & timing", 5, 3, display_mode="current", limit=6, show_leader=False, show_mic=False, show_description=False, show_production_note=False, production_note_field="", production_note_fields=[], production_note_colors={}),
             widget("people", "Team members", "Planning Center", 4, 4, team_ids=[], position_keys=[], position_labels={}),
             widget("sermon_notes", "Sermon notes", "Planning Center", 5, 5, item_title="Message", field_name="Vocals", font_scale=100),
             widget("controls", "Service controls", "Service & timing", 4, 2),
@@ -99,10 +99,10 @@ BUILTIN_MODULES = [
         "configuration_path": "/modules#open-sound-meter", "documentation": "/docs/OPEN_SOUND_METER.md", "frontend": {"renderer": "legacy-adapter"},
     },
     {
-        "id": "behringer-mixer", "name": "Behringer X32 / WING", "vendor": "Behringer / Midas", "version": "1.0.2",
-        "description": "Touch-friendly X32, M32, and WING fader banks with live console feedback, channel sends, and mute control.", "category": "Audio control",
+        "id": "behringer-mixer", "name": "Audio consoles", "vendor": "Behringer / Midas / Allen & Heath / Yamaha", "version": "1.1.0",
+        "description": "X32/M32, WING, Avantis, dLive and SQ fader banks; Yamaha CL/QL/TF monitoring. Personal sends on X32/M32 and WING.", "category": "Audio control",
         "settings_key": "behringer", "dependencies": [], "provides": ["churchboard.mixer-control/v1"], "consumes": [],
-        "widgets": [widget("behringer_faders", "Behringer faders", "Audio & streaming", 6, 5, strips=[{"id": "main-lr", "label": "MAIN LR", "kind": "main", "number": 1}])], "pages": [],
+        "widgets": [widget("behringer_faders", "Console faders", "Audio & streaming", 6, 5, strips=[{"id": "main-lr", "label": "MAIN LR", "kind": "main", "number": 1}])], "pages": [],
         "setup": [{"title": "Enable remote control", "text": "Connect ChurchBoard and the console to the same trusted production network, then enter the console address."}, {"title": "Build a fader bank", "text": "Add the widget to a page and choose channels, bus/aux mixes, sends, DCAs, or the main mix."}],
         "configuration_path": "/modules#behringer-mixer", "documentation": "/docs/BEHRINGER.md", "frontend": {"renderer": "legacy-adapter"},
     },

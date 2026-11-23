@@ -3,6 +3,7 @@
 from pathlib import Path
 import os
 import shutil
+import ssl
 import sys
 from PyInstaller.utils.hooks import collect_data_files
 
@@ -21,10 +22,17 @@ datas = [
     (str(project / "LICENSE"), "."),
     (str(project / "LEGAL.md"), "."),
     (str(project / "THIRD_PARTY_NOTICES.md"), "."),
+    (str(project / "licenses" / "PRODECK.txt"), "licenses"),
     (str(project / "packaging" / "licenses" / "prodmesh-rta.LICENSE"), "legal/prodmesh-rta"),
     (str(project / "packaging" / "licenses" / "qt-LGPL-3.0-only.txt"), "legal/qt"),
 ]
 datas.extend(collect_data_files("certifi"))
+# Some Python distributions patch ssl.py to load this policy file beside
+# the module. Preserve the same policy when freezing those distributions.
+ssl_policy = Path(ssl.__file__).with_name("codex-rejected-cas.pem")
+if ssl_policy.is_file():
+    datas.append((str(ssl_policy), "."))
+
 collected_licenses = project / "build" / "legal" / "third-party"
 if collected_licenses.is_dir():
     datas.append((str(collected_licenses), "legal/third-party"))

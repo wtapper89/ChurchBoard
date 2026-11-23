@@ -546,6 +546,7 @@ class PlanningCenterClient:
             fallback_leader = item_leader(attrs, note_rows)
             item = {
                 "id": row["id"], "title": attrs.get("title") or attrs.get("description") or "Untitled",
+                "description": str(attrs.get("description") or ""),
                 "length": length, "sequence": attrs.get("sequence", 0), "starts_after": elapsed, "notes": notes, "note_fields": note_fields,
                 "item_type": attrs.get("item_type") or "item", "key_name": attrs.get("key_name") or "",
                 "leader": ", ".join(dict.fromkeys(assigned_leaders)) or fallback_leader,

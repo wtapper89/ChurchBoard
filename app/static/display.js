@@ -142,7 +142,7 @@ function widgetStateKey(widget,state){
   if(widget.type==="board_navigation")return`board-navigation:${JSON.stringify(settings.links||[])}`;
   if(widget.type==="service")return`service:${objectId(service)}:${timing.source||""}:${timing.state||""}`;
   if(widget.type==="timing")return`timing:${String(timing.current_item?.id||"")}:${timing.rehearsal===true}`;
-  if(["assignments","mics"].includes(widget.type))return`${widget.type}:${JSON.stringify([state.people||[],state.mics||[],state.planning_center_media||{}])}`;
+  if(["assignments","mics"].includes(widget.type))return`${widget.type}:${JSON.stringify([state.people||[],state.mics||[],state.planning_center_media||{},state.unassigned_icon||""])}`;
   if(widget.type==="slides"||widget.type==="producer")return`${widget.type}:${JSON.stringify([pp,service,timing])}`;
   if(widget.type==="playlist"){const rows=(pp.playlist_presentations||[]).map(item=>({index:item.index,title:item.title,presentation_uuid:item.presentation_uuid,is_pco:item.is_pco,triggerable:item.triggerable,type:item.type,slides:(item.slides||[]).map(slide=>({index:slide.index,part:slide.part,color:slide.color,image_url:slide.image_url}))}));return`playlist:${JSON.stringify([pp.playlist_name,pp.title,pp.planning_center_item_title,rows,settings])}`}
   if(widget.type==="pp_controls")return`pp-controls:${String(pp.presentation_uuid||"")}:${String(pp.title||"")}`;
@@ -153,7 +153,7 @@ function widgetStateKey(widget,state){
   if(widget.type==="pp_macros")return`pp-macros:${JSON.stringify([pp.macros||[],settings])}`;
   if(widget.type==="notes")return`notes:${String(pp.current?.notes||"")}`;
   if(widget.type==="sermon_notes")return`sermon-notes:${objectId(timing.service_items||service.items)}:${JSON.stringify(settings)}`;
-  if(widget.type==="order")return`order:${objectId(timing.service_items||service.items)}:${objectId(state.people)}:${JSON.stringify(leaderMicKey(state.mics))}:${String(timing.current_item?.id||"")}:${timing.service_time_id||""}:${settings.show_leader!==false}:${settings.show_mic!==false}:${!!settings.show_production_note}:${JSON.stringify(settings.production_note_fields||[settings.production_note_field||""])}:${JSON.stringify(settings.production_note_colors||{})}`;
+  if(widget.type==="order")return`order:${objectId(timing.service_items||service.items)}:${objectId(state.people)}:${JSON.stringify(leaderMicKey(state.mics))}:${String(timing.current_item?.id||"")}:${timing.service_time_id||""}:${settings.show_leader!==false}:${settings.show_mic!==false}:${!!settings.show_description}:${!!settings.show_production_note}:${JSON.stringify(settings.production_note_fields||[settings.production_note_field||""])}:${JSON.stringify(settings.production_note_colors||{})}`;
   if(widget.type==="people"||widget.type==="person")return`${widget.type}:${objectId(state.people)}`;
   if(widget.type==="controls")return`controls:${JSON.stringify([state.planning_center_live||{},state.service_control||{},timing.current_item?.id,timing.current_item?.title])}`;
   if(widget.type==="restream")return`restream:${JSON.stringify(state.restream||{})}`;

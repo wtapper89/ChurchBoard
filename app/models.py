@@ -47,6 +47,10 @@ class SettingsUpdate(BaseModel):
     organization_name: str = Field(default="My Church", max_length=120)
     timezone: str = Field(default="America/New_York", max_length=100)
     demo_mode: bool = True
+    unassigned_icon: str | None = Field(
+        default=None, max_length=1_398_130,
+        pattern=r"^(?:data:image/(?:png|jpeg|webp);base64,[A-Za-z0-9+/]+={0,2})?$",
+    )
     planning_center: dict[str, Any] = Field(default_factory=dict)
     propresenter: dict[str, Any] = Field(default_factory=dict)
     proclaim: dict[str, Any] = Field(default_factory=dict)
